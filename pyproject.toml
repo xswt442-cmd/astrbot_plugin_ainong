@@ -23,6 +23,9 @@ qq-verify = ["playwright>=1.51,<2"]
 [tool.pytest.ini_options]
 testpaths = ["test"]
 asyncio_mode = "auto"
+# 项目包放在仓库根的 ainong/ 而不是 src/ 布局，装成 editable 时能找到；
+# 这一行让不安装本项目的环境（直接跑 pytest）也能 import。
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
