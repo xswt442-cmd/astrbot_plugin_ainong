@@ -1,12 +1,16 @@
 # 发版
 
-一次发版是升一个版本号、合并到 `main`、在合并后的提交上打 `vX.Y.Z` 标签。
+一次发版是升一个版本号、合并到 `main`，然后在 Actions 里触发 `release`
+工作流，它会打标签并建 Release。
+
+**不要本地打标签。** 标签和 Release 是两个对象，分开手做会漏——v0.1.2 与
+v0.1.3 就只推了标签，Releases 页面停在 v0.1.1。
+
 分支推送不发布任何东西。示例用 `dev`，换别的开发分支同理。
 
 ## 一次发版会影响什么
 
-- **GitHub Release** —— 第 6、7 步手动触发，不自动。打标签和建 Release 是两步，
-  都要做。
+- **GitHub Release** —— 手动触发 `release` 工作流，不自动。
 - **AstrBot 插件市场** —— **不由标签驱动**。要在
   <https://cloud.astrbot.app/publish> 发布，注册 AstrBot Cloud 账号后填本仓库
   地址，平台自己解析 `metadata.yaml`。
@@ -30,7 +34,10 @@
 1. 在开发分支上定 `X.Y.Z`，更新带版本的地方：
 
    - `metadata.yaml` 的 `version`（带 `v` 前缀，如 `v0.1.0`）
+   - `pyproject.toml` 的 `version`（**不带** `v`，如 `0.1.0`）
    - `docs/CHANGELOG.md` 的首个小节，标题写成 `## [X.Y.Z] - YYYY-MM-DD`
+
+   三处都要改。`test/test_version.py` 会检查它们一致，CI 每次推送都跑。
 
 2. 跑本仓库的检查（命令见 `AGENTS.md` 的验证一节）：
 
@@ -58,35 +65,26 @@
    git push origin main
    ```
 
-6. 在 `main` 上打标签并推送：
+6. 在 Actions 里触发 `release` 工作流：<https://github.com/xswt442-cmd/astrbot_plugin_ainong/actions/workflows/release.yml>
+   → Run workflow → 填版本号（带 `v`，如 `v0.1.4`）。
 
-   ```sh
-   git tag vX.Y.Z main
-   git push origin vX.Y.Z
-   ```
+   工作流会自己完成剩下的事，并在每一步前先检查：
 
-   **在 `tag` 命令里写 `main`，不要给 `HEAD` 所在的位置打标签。** 这是
-   squash 或 rebase 合并会踩的坑：分支上的提交会被替换成 `main` 上的一个新提交，
-   在分支提交上打的标签从 `main` 不可达，市场和 GitHub 拿到的就不是同一份代码。
-   如果已经打错了，本地删掉这个标签，合并完再打 `main`。
+   - 触发的是 `main` 而不是别的分支
+   - 版本号格式是 `vX.Y.Z`
+   - `metadata.yaml`、`pyproject.toml`、`docs/CHANGELOG.md` 三处版本号一致
+   - `main` 的 CI 是绿的（最多等 10 分钟）
+   - 这个标签还没被占用
+   - `git archive` 出来的包里没有 `test/` 和 `.github/`，有 `logo.png`，且不超过 16 MB
 
-7. 建 GitHub Release。**`git tag` 推上去不等于有 Release** —— 标签只是给某个
-   提交起了个名字，Release 是另一个对象，要在 Releases 页面才看得见。少做这
-   一步，`git tag` 成功了但 Releases 页面仍是旧的，很容易以为已经发完。
+   然后打标签（显式写 `main`，不给 `HEAD` 所在位置打标签——squash 或 rebase
+   合并会把分支提交换成 `main` 上的新提交，在分支提交上打的标签从 `main`
+   不可达，市场和 GitHub 拿到的就不是同一份代码），再建 Release，说明自动
+   取 `CHANGELOG` 对应小节。最后核对最新的 Release 是 `Latest` 且版本号正确。
 
-   ```sh
-   gh release create vX.Y.Z --title "vX.Y.Z" --notes "<CHANGELOG 对应小节>"
-   ```
+   工作流跑完后，**市场发布还没做**，继续第 7 步。
 
-   说明直接取 `docs/CHANGELOG.md` 对应小节的内容。发完核对一次：
-
-   ```sh
-   gh release list
-   ```
-
-   最新的那条要显示为 `Latest`，且版本号是刚发的那个。
-
-8. 要进 AstrBot 插件市场，开 <https://cloud.astrbot.app/publish>，填本仓库地址
+7. 要进 AstrBot 插件市场，开 <https://cloud.astrbot.app/publish>，填本仓库地址
    提交。平台自己解析 `metadata.yaml`，所以这些字段要写对：
 
    | 字段 | 值 |
