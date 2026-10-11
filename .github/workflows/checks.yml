@@ -1,0 +1,182 @@
+name: checks
+
+on:
+  # 门禁要跑在改动还能被处理的地方。只有 push 和定时任务时，第一个信号
+  # 是合并提交把 main 弄红，而合并请求可能从未被测过。
+  pull_request:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main, dev]
+
+# 每个分支一次运行：一串提交会互相取消，而不是把完整的检查排在彼此后面。
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: 静态检查与测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: 准备 Python
+        run: uv python install
+
+      - name: 安装依赖
+        run: uv sync --locked
+
+      - name: lint
+        run: uv run ruff check .
+
+      - name: 格式检查
+        run: uv run ruff format --check .
+
+      - name: 测试
+        run: uv run pytest -q
+
+  dependencies:
+    name: 依赖清单同步
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: 准备 Python
+        run: uv python install
+
+      - name: 同步依赖
+        run: uv sync --locked
+
+      # requirements.txt 是交给 AstrBot 装进容器的依赖清单，由 uv export
+      # 生成。改了 pyproject.toml 却忘了重新导出，装插件时就会缺包，而本地
+      # uv 环境里一切正常，所以这里单独设一道门。
+      #
+      # uv 写进文件头的注释带着 --output-file 的路径，那条路径每台机器不同，
+      # 所以先剥掉前两行注释再比对。
+      - name: 检查 requirements.txt 是否与 pyproject.toml 一致
+        run: |
+          uv export --format requirements.txt --no-hashes --no-dev \
+            --no-emit-project --frozen --output-file /tmp/expected.txt
+          tail -n +3 /tmp/expected.txt > /tmp/expected-clean.txt
+          tail -n +3 requirements.txt > /tmp/actual-clean.txt
+          if ! diff -u /tmp/actual-clean.txt /tmp/expected-clean.txt; then
+            echo "::error::requirements.txt 与 pyproject.toml 不一致。"
+            echo "重新生成：uv export --format requirements.txt --no-hashes --no-dev"
+            echo "  --no-emit-project --frozen --output-file requirements.txt"
+            exit 1
+          fi
+
+  signature:
+    name: YSDK 签名真实验证
+    runs-on: ubuntu-latest
+    # 这道检查打真实的腾讯接口，会发三次请求确认服务端确实在验签。
+    # 一天跑一次足够发现签名被改坏，不需要每次提交都跑。
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: 准备 Python
+        run: uv python install
+
+      - name: 同步依赖
+        run: uv sync --locked
+
+      - name: 验证签名被服务端接受
+        run: uv run python test/verify_ysdk_signature.py
+
+  deploy:
+    name: 浏览器服务配置
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: 准备 Python
+        run: uv python install
+
+      - name: 同步依赖
+        run: uv sync --locked
+
+      # 浏览器容器起不来时 seccomp 配置是最常见的原因，而它只在部署时才暴露。
+      # 配置是合法 JSON 不代表容器能启动——白名单漏一个 syscall 就可能让
+      # runc 初始化直接失败，所以这里真的把容器跑起来。
+      - name: compose 片段可渲染
+        run: |
+          docker compose -f deploy/compose.playwright.yaml config --quiet
+          echo "compose 配置合法"
+
+      - name: seccomp 配置的约定正确
+        run: |
+          uv run python -c "
+          import json, sys
+          d = json.load(open('deploy/seccomp-profile.json', encoding='utf-8'))
+          assert d['defaultAction'] == 'SCMP_ACT_ALLOW', '默认动作应放行，只显式拒绝危险项'
+          assert d['architectures'], '必须声明架构，否则未声明的架构不受限制'
+          组 = d['syscalls']
+          assert 组, '拒绝列表不能为空，否则等于没有 seccomp 限制'
+          拒绝 = set(组[0]['names'])
+          assert 组[0]['action'] == 'SCMP_ACT_ERRNO'
+          # 提权类调用必须放行：runc 启动容器时用它们给进程降权，拉黑会直接
+          # 让容器 abort。曾经把它们当危险项写进过，容器起不来。
+          for 需放行 in ('setuid', 'setgid', 'setresuid', 'setresgid'):
+              assert 需放行 not in 拒绝, 需放行 + ' 是容器启动必需，不能拉黑'
+          # 反过来，能用来逃逸容器或窥探宿主的必须拦住
+          for 需拒绝 in ('mount', 'pivot_root', 'setns', 'unshare', 'ptrace', 'bpf'):
+              assert 需拒绝 in 拒绝, 需拒绝 + ' 必须在拒绝列表里'
+          print('seccomp 约定正确，拒绝 ' + str(len(拒绝)) + ' 项')
+          "
+
+      # 唯一能确定 seccomp 配对了的方法：把容器跑起来，驱动一次浏览器。
+      # 少一个 syscall 这步就红——「配置是合法 JSON」证明不了容器能起。
+      # 构建镜像约需 10 分钟，跑在定时任务和 main 上，不阻塞每次推送。
+      # 片段里的网络是 external（复用 AstrBot 的），runner 上没有这个网络，
+      # 所以这里覆盖成一个临时网络再起。
+      - name: 浏览器容器能启动并驱动浏览器
+        if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
+        run: |
+          docker build -f deploy/Dockerfile.browser -t ainong-playwright:ci deploy/
+          docker network create ainong-ci-net
+          docker run -d --name pw --network ainong-ci-net \
+            --security-opt seccomp=deploy/seccomp-profile.json \
+            --shm-size=512m --memory=1200m ainong-playwright:ci
+          sleep 15
+          if ! docker logs pw 2>&1 | grep -q "Listening on"; then
+            echo "::error::浏览器服务没有监听。日志："
+            docker logs pw 2>&1
+            docker rm -f pw
+            exit 1
+          fi
+          docker run --rm --network container:pw --entrypoint sh ainong-playwright:ci -c '
+            node -e "
+            const { chromium } = require(\"/usr/lib/node_modules/playwright\");
+            (async () => {
+              const b = await chromium.launch({ headless: true });
+              const p = await b.newPage();
+              await p.goto(\"https://example.com\", { waitUntil: \"domcontentloaded\" });
+              const t = await p.title();
+              await b.close();
+              if (!t.includes(\"Example\")) { throw new Error(\"标题不对：\" + t); }
+              console.log(\"浏览器可用，标题：\" + t);
+            })();
+            "'
+          docker rm -f pw
+          docker network rm ainong-ci-net
+          echo "浏览器容器验证通过"

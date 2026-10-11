@@ -1,0 +1,8 @@
+{
+  "browser_timeout_seconds": {
+    "description": "扫码等待时长（秒）",
+    "type": "int",
+    "default": 180,
+    "hint": "从二维码发出开始计时。二维码本身有效期约五分钟，超时后需要重新发 /绑定。"
+  }
+}
