@@ -104,7 +104,11 @@ jobs:
 
       # 浏览器容器起不来时 seccomp 配置是最常见的原因，而它只在部署时才暴露。
       # 配置是合法 JSON 不代表容器能启动——白名单漏一个 syscall 就可能让
-      # runc 初始化直接失败，所以这里真的把容器跑起来。
+      # runc 初始化直接失败，所以下面真的要跑容器。
+      #
+      # 静态检查每次触发都跑（秒级）。真跑容器要构建镜像、约 80 秒，放在
+      # deploy job 里只对定时任务开启：它对每次发版都是纯等待，而发版还要
+      # 等 main 的门禁变绿。seccomp 配置很少改动，定时跑足以兜住。
       - name: compose 片段可渲染
         run: |
           docker compose -f deploy/compose.playwright.yaml config --quiet
@@ -133,11 +137,11 @@ jobs:
 
       # 唯一能确定 seccomp 配对了的方法：把容器跑起来，驱动一次浏览器。
       # 少一个 syscall 这步就红——「配置是合法 JSON」证明不了容器能起。
-      # 构建镜像约需 10 分钟，跑在定时任务和 main 上，不阻塞每次推送。
+      # 构建镜像约需 80 秒，只在定时任务上跑，别挂在每次发版的必经之路上。
       # 片段里的网络是 external（复用 AstrBot 的），runner 上没有这个网络，
       # 所以这里覆盖成一个临时网络再起。
       - name: 浏览器容器能启动并驱动浏览器
-        if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
+        if: github.event_name == 'schedule'
         run: |
           docker build -f deploy/Dockerfile.browser -t ainong-playwright:ci deploy/
           docker network create ainong-ci-net

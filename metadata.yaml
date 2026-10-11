@@ -2,7 +2,7 @@ name: astrbot_plugin_ainong
 display_name: 爱农
 short_desc: 查王者营地战绩，让模型替你锐评。
 desc: 通过王者营地官方接口读取玩家的段位、战绩与英雄数据，交给大模型做锐评和玩家画像。
-version: v0.1.5
+version: v0.1.6
 author: xswt442-cmd
 repo: https://github.com/xswt442-cmd/astrbot_plugin_ainong
 astrbot_version: ">=4.16,<5"
