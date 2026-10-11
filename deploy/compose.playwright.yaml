@@ -3,37 +3,41 @@
 # 用途：为 QQ 扫码登录提供真实浏览器会话。插件通过 Compose 内部网络访问它。
 # 不映射端口到宿主机，所以不会对外暴露。
 #
-# 用法：把下面的服务块合并进 AstrBot 的 compose 文件，同一 network 下，
-# 并把 seccomp-profile.json 与 Dockerfile.browser 放到该文件同目录。
+# 用法：把下面的服务块合并进 AstrBot 的 compose 文件，并确保 network 名字
+# 与 AstrBot 所在的那个一致。seccomp-profile.json 放到该文件同目录。
 #
-# 先构建镜像（构建时本机需要能访问 npm，跑起来就不需要网络）：
+# 镜像需要先构建（构建时本机要能访问 npm，跑起来就不需要网络了）：
 #   docker build -f Dockerfile.browser -t ainong-playwright:1.63.0 .
+#
+# 传输到另一台机器用这个，压缩后约 0.9 GB，基础层能去重：
+#   docker save ainong-playwright:1.63.0 | gzip -1 > pw.tar.gz
+#   ssh host 'gunzip -c | sudo docker load' < pw.tar.gz
 #
 # 版本对应：镜像里的 playwright 与插件依赖里的版本必须一致。浏览器由服务端
 # 提供，客户端只需要 Python 包；两者版本错配时协议会不兼容。
 #
-# 内存说明：一个 Chromium 会话常驻约 300-500 MiB。2 核 / 2 GiB 的机器上
-# 并发会话数应保持 1。下面的 mem_limit 是给单个浏览器进程设的上限，
-# 超出后会被内核 OOM 杀掉，不如让它快速失败。
+# 内存说明（实测，不是估计）：空载服务约 116 MiB，Chromium 是每个会话
+# 单独启动的而非常驻，一个会话再加几百 MiB。下面的 mem_limit 是硬上限，
+# 超出会被内核 OOM 杀掉。
 
 services:
   playwright:
-    build:
-      context: .
-      dockerfile: Dockerfile.browser
     image: ainong-playwright:1.63.0
     container_name: ainong-playwright
     restart: unless-stopped
+    # Chromium 需要较大的共享内存，放不下会随机崩溃。
     ipc: host
     shm_size: 512mb
-    mem_limit: 900m
+    mem_limit: 1200m
     security_opt:
       - seccomp=seccomp-profile.json
-    # 不写任何volume：浏览器状态不落盘，会话随容器重建而消失。
+    # 不写任何 volume：浏览器状态不落盘，会话随容器重建而消失。
     # 凭据由插件自己持久化，不依赖浏览器侧的 profile。
     networks:
       - qq_ai_net
 
 networks:
+  # external：复用 AstrBot 已有的网络，不要由这份片段另建一个。
+  # 名字要改成实际那个——用 docker inspect astrbot 查它的网络名。
   qq_ai_net:
-    driver: bridge
+    external: true

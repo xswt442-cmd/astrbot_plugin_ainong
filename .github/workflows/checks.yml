@@ -146,14 +146,17 @@ jobs:
 
       # 唯一能确定 seccomp 配对了的方法：把容器跑起来，驱动一次浏览器。
       # 少一个 syscall 这步就红——「配置是合法 JSON」证明不了容器能起。
-      # 构建镜像约需 10 分钟，跑在只有定时任务触发的分支上，不阻塞每次推送。
+      # 构建镜像约需 10 分钟，跑在定时任务和 main 上，不阻塞每次推送。
+      # 片段里的网络是 external（复用 AstrBot 的），runner 上没有这个网络，
+      # 所以这里覆盖成一个临时网络再起。
       - name: 浏览器容器能启动并驱动浏览器
         if: github.event_name == 'schedule' || github.ref == 'refs/heads/main'
         run: |
           docker build -f deploy/Dockerfile.browser -t ainong-playwright:ci deploy/
-          docker run -d --name pw \
+          docker network create ainong-ci-net
+          docker run -d --name pw --network ainong-ci-net \
             --security-opt seccomp=deploy/seccomp-profile.json \
-            --shm-size=512m --memory=900m ainong-playwright:ci
+            --shm-size=512m --memory=1200m ainong-playwright:ci
           sleep 15
           if ! docker logs pw 2>&1 | grep -q "Listening on"; then
             echo "::error::浏览器服务没有监听。日志："
@@ -175,4 +178,5 @@ jobs:
             })();
             "'
           docker rm -f pw
+          docker network rm ainong-ci-net
           echo "浏览器容器验证通过"
