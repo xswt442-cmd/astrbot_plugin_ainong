@@ -150,6 +150,13 @@ jobs:
           set -euo pipefail
           # 显式写 main，不给 HEAD 所在位置打标签：squash 或 rebase 合并会
           # 把分支提交换成 main 上的新提交，在分支提交上打的标签从 main 不可达。
+          #
+          # 身份要在这里配。checkout 只配了认证用的凭据，没配 user.name 与
+          # user.email，而打标签是写操作、要生成 tagger，缺身份直接报
+          # "Committer identity unknown" 退出 128。
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git tag -a "$ver" main -m "$ver"
           git push origin "$ver"
 
