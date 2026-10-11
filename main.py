@@ -114,9 +114,10 @@ class Main(Star):
         self._会话标识[用户] = event.unified_msg_origin
         会话.开始等待(self._收到授权码)
 
-        from astrbot.api.message_components import Image
-
-        yield event.chain_result([Image.fromBase64(图片), "用微信扫这个码。"])
+        # 用链式接口而不是 event.chain_result([...])：后者要的是消息组件列表，
+        # 塞裸字符串进去，发送前的日志环节会 AttributeError 崩掉整条流水线，
+        # 用户那边只看到没反应。组件由这里的接口负责转换。
+        yield (event.plain_result("用微信扫这个码，扫完等一会儿。").base64_image(图片))
 
     async def _收到授权码(self, 用户: str, 授权码: str) -> None:
         """扫码完成后登录营地并存凭据。"""
