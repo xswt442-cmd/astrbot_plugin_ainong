@@ -17,3 +17,5 @@ test/gen/
 
 # logo 原稿。仓库只留压缩后的 logo.png，原图 1.8 MB 没进版本库的价值。
 icon/
+.verify_noflaky.py
+.verify_noflaky.py

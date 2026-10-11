@@ -58,7 +58,9 @@ class Test分块加密:
         assert 分块加密(b"same") != 分块加密(b"same")
 
     def test_可用私钥解开单块(self):
-        # 自检：构造密钥对走一遍完整往返，确认填充格式正确
+        # 自检：构造密钥对走一遍完整往返，确认填充格式正确。
+        # 走的是 cryptography 自己的 encrypt/decrypt，与分块加密的实现无关，
+        # 这里只是确认标准 PKCS#1 v1.5 的形状符合预期。
         from cryptography.hazmat.primitives.asymmetric import rsa
 
         密钥 = rsa.generate_private_key(public_exponent=65537, key_size=1024)
