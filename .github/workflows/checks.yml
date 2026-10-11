@@ -60,24 +60,11 @@ jobs:
       - name: 同步依赖
         run: uv sync --locked
 
-      # requirements.txt 是交给 AstrBot 装进容器的依赖清单，由 uv export
-      # 生成。改了 pyproject.toml 却忘了重新导出，装插件时就会缺包，而本地
-      # uv 环境里一切正常，所以这里单独设一道门。
-      #
-      # uv 写进文件头的注释带着 --output-file 的路径，那条路径每台机器不同，
-      # 所以先剥掉前两行注释再比对。
-      - name: 检查 requirements.txt 是否与 pyproject.toml 一致
-        run: |
-          uv export --format requirements.txt --no-hashes --no-dev \
-            --no-emit-project --frozen --output-file /tmp/expected.txt
-          tail -n +3 /tmp/expected.txt > /tmp/expected-clean.txt
-          tail -n +3 requirements.txt > /tmp/actual-clean.txt
-          if ! diff -u /tmp/actual-clean.txt /tmp/expected-clean.txt; then
-            echo "::error::requirements.txt 与 pyproject.toml 不一致。"
-            echo "重新生成：uv export --format requirements.txt --no-hashes --no-dev"
-            echo "  --no-emit-project --frozen --output-file requirements.txt"
-            exit 1
-          fi
+      # requirements.txt 是 AstrBot 安装插件时唯一看的清单，而它必须保持手写：
+      # uv export 会把包钉成 `==`，与核心自带依赖的版本护栏冲突，装不上。
+      # 具体约束写成 test/test_requirements.py 里的断言，在 tests 里一起跑。
+      - name: 检查依赖清单
+        run: uv run pytest test/test_requirements.py -q
 
   signature:
     name: YSDK 签名真实验证
