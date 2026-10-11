@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.env
+
+# 生成测试向量用的参考实现（第三方代码，不随仓库分发）
+test/gen/
+.probe_*.py
+.verify.log
