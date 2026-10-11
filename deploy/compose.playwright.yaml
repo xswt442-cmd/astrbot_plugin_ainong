@@ -1,17 +1,16 @@
 # 浏览器服务片段
 #
-# 用途：为 QQ 扫码登录提供真实浏览器会话。插件通过 Compose 内部网络访问它，
-# 不暴露任何宿主机端口。
+# 用途：为 QQ 扫码登录提供真实浏览器会话。插件通过 Compose 内部网络访问它。
+# 不映射端口到宿主机，所以不会对外暴露。
 #
 # 用法：把下面的服务块合并进 AstrBot 的 compose 文件，同一 network 下，
-# 并把 seccomp-profile.json 放到该文件同目录。
+# 并把 seccomp-profile.json 与 Dockerfile.browser 放到该文件同目录。
 #
-# 版本对应：镜像 tag 与插件依赖里的 playwright 版本必须一致。浏览器由服务端
+# 先构建镜像（构建时本机需要能访问 npm，跑起来就不需要网络）：
+#   docker build -f Dockerfile.browser -t ainong-playwright:1.63.0 .
+#
+# 版本对应：镜像里的 playwright 与插件依赖里的版本必须一致。浏览器由服务端
 # 提供，客户端只需要 Python 包；两者版本错配时协议会不兼容。
-#
-# 启动说明：官方镜像自带 Playwright 的 run-server，直接跑命令即可，
-# 不要用 npx 现装——那要访问 npm，而容器内默认没有代理（宿主的 HTTP_PROXY
-# 不会自动传进容器），会卡在下载。
 #
 # 内存说明：一个 Chromium 会话常驻约 300-500 MiB。2 核 / 2 GiB 的机器上
 # 并发会话数应保持 1。下面的 mem_limit 是给单个浏览器进程设的上限，
@@ -19,20 +18,18 @@
 
 services:
   playwright:
-    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    build:
+      context: .
+      dockerfile: Dockerfile.browser
+    image: ainong-playwright:1.63.0
     container_name: ainong-playwright
     restart: unless-stopped
     ipc: host
-    # WSGI 服务监听容器内 3000，仅供同网络访问
-    command: >
-      playwright run-server
-      --host=0.0.0.0
-      --port=3000
     shm_size: 512mb
     mem_limit: 900m
     security_opt:
       - seccomp=seccomp-profile.json
-    # 不写任何 volume：浏览器状态不落盘，会话随容器重建而消失。
+    # 不写任何volume：浏览器状态不落盘，会话随容器重建而消失。
     # 凭据由插件自己持久化，不依赖浏览器侧的 profile。
     networks:
       - qq_ai_net
