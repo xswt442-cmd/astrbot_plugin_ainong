@@ -2,10 +2,21 @@ name: astrbot_plugin_ainong
 display_name: 爱农
 short_desc: 查王者营地战绩，让模型替你锐评。
 desc: 通过王者营地官方接口读取玩家的段位、战绩与英雄数据，交给大模型做锐评和玩家画像。
-version: v0.1.4
+version: v0.1.5
 author: xswt442-cmd
 repo: https://github.com/xswt442-cmd/astrbot_plugin_ainong
 astrbot_version: ">=4.16,<5"
+# 市场分类。取值是市场自己定的那几个中文，见 docs/RELEASING.md。
+# 查个人战绩属于游戏数据查询，市场上同类（炉石战棋榜、彩虹六号查询工具、
+# 雀魂助手）都归娱乐，所以这里也是娱乐。不填会被默认成「其他」，
+# 在插件详情页显示成 [MISSING: ...其他]。
+category: 娱乐
+# 标签用于市场搜索。同类插件的惯例是「游戏」+ 具体游戏名。
+tags:
+  - 游戏
+  - 王者荣耀
+  - 战绩查询
+  - 数据统计
 support_platforms:
   - aiocqhttp
   - weixin_oc

@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-ainong"
-version = "0.1.4"
+version = "0.1.5"
 description = "查王者营地战绩，让模型替你锐评。"
 requires-python = ">=3.10"
 dependencies = [
