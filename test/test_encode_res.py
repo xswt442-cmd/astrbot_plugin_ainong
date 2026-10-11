@@ -21,19 +21,32 @@ def _明文形态(user_key: str = "the-user-key") -> str:
     return base64.b64encode(json.dumps({"userKey": user_key}).encode("utf-8")).decode("ascii")
 
 
+# 固定密钥，不用随机生成。
+#
+# 随机生成时这段构造偶尔会造出无效数据：填充块当成整数后可能不小于模数 n，
+# 而 pow(m, d, n) 内部先取模，逆运算拿回来的是 m mod n——高位被截掉，剥块
+# 从错的位置开始，报「还原出的内容不是 JSON」。概率约千分之一，本地跑十几次
+# 碰不到，CI 上稳定复现。固定密钥让测试可重复。
+_测试私钥 = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+
+
 def _密文形态(user_key: str = "the-user-key", 密钥=None) -> tuple[str, rsa.RSAPrivateKey]:
     """造一份与营地同构的密文。
 
     营地服务端持有私钥，对填充后的明文做一次幂运算（用私钥指数 d）；
     客户端拿公钥指数 e 做逆运算还原。
     """
-    私钥 = 密钥 or rsa.generate_private_key(public_exponent=65537, key_size=1024)
+    私钥 = 密钥 or _测试私钥
     明文 = json.dumps({"userKey": user_key}).encode("utf-8")
     私钥数 = 私钥.private_numbers()
     块长 = 私钥.key_size // 8
     填充 = b"\xff" * (块长 - len(明文) - 3)
     块 = b"\x00\x01" + 填充 + b"\x00" + 明文
-    密文 = pow(int.from_bytes(块, "big"), 私钥数.d, 私钥数.public_numbers.n)
+
+    数字 = int.from_bytes(块, "big")
+    if 数字 >= 私钥数.public_numbers.n:
+        raise ValueError("填充块不小于模数，构造出的密文无法还原")
+    密文 = pow(数字, 私钥数.d, 私钥数.public_numbers.n)
     return base64.b64encode(密文.to_bytes(块长, "big")).decode("ascii"), 私钥
 
 
