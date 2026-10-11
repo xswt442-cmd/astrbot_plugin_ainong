@@ -1,0 +1,42 @@
+# 本文件由 uv 自动生成，不要手工编辑。
+# 重新生成：uv export --format requirements.txt --no-hashes --no-dev --no-emit-project --frozen --output-file requirements.txt
+aiohappyeyeballs==2.7.1
+    # via aiohttp
+aiohttp==3.14.5
+    # via astrbot-plugin-ainong
+aiosignal==1.4.0
+    # via aiohttp
+async-timeout==5.0.1 ; python_full_version < '3.11'
+    # via aiohttp
+attrs==26.1.0
+    # via aiohttp
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+    # via cryptography
+cryptography==50.0.2
+    # via astrbot-plugin-ainong
+frozenlist==1.8.0
+    # via
+    #   aiohttp
+    #   aiosignal
+idna==3.20
+    # via yarl
+multidict==7.1.0
+    # via
+    #   aiohttp
+    #   yarl
+propcache==0.5.4
+    # via
+    #   aiohttp
+    #   yarl
+pycparser==3.11 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
+pyyaml==6.0.3
+    # via astrbot-plugin-ainong
+typing-extensions==4.16.0 ; python_full_version < '3.13'
+    # via
+    #   aiohttp
+    #   aiosignal
+    #   cryptography
+    #   multidict
+yarl==1.25.1
+    # via aiohttp
