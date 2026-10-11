@@ -13,10 +13,11 @@ from typing import Any
 
 import aiohttp
 
-from ainong.crypto.pkcs1 import strip_pkcs1_padding
-from ainong.crypto.xxtea import decrypt as xxtea_decrypt
-from ainong.crypto.xxtea import encrypt as xxtea_encrypt
-from ainong.crypto.xxtea import normalize_key
+from ..crypto.pkcs1 import strip_pkcs1_padding
+from ..crypto.xxtea import decrypt as xxtea_decrypt
+from ..crypto.xxtea import encrypt as xxtea_encrypt
+from ..crypto.xxtea import normalize_key
+from .pacing import 频控闸
 
 __all__ = ["营地传输"]
 
@@ -64,15 +65,25 @@ _公共头 = {
     "User-Agent": "okhttp/4.9.1",
 }
 
-# 营地返回的业务码：玩家自己关闭了战绩展示
+_营地网关 = "https://ssl.kohsocialapp.qq.com:10001"
+营地网关 = _营地网关
+
+# 营地返回的业务码
 _玩家已隐藏 = -10107
+_账号频控 = -30107
+
 _业务错误文案 = {
     _玩家已隐藏: "该玩家在王者营地关闭了战绩展示，请让对方在营地的隐私设置里打开",
+    _账号频控: "这个营地账号被限流了，冷却中",
 }
 
 
 class 业务错误(Exception):
     """营地接口返回了失败的业务码。"""
+
+
+# 冷却信息跨请求存在，账号维度的限流不能按传输实例算——每次查询都新建实例。
+全局频控 = 频控闸()
 
 
 class 营地传输:
@@ -93,6 +104,24 @@ class 营地传输:
 
     def 绑定账号(self, 营地ID: str, 令牌: str, 对称密钥: str) -> None:
         self._账号 = {"营地ID": 营地ID, "令牌": 令牌, "对称密钥": 对称密钥}
+
+    def _闸(self):
+        """取当前账号的频控闸。冷却信息在账号维度，不在传输实例上。"""
+        if self._账号 is None:
+            raise RuntimeError("尚未登录营地账号")
+        return 全局频控.取账号闸(self._账号["营地ID"])
+
+    async def _等闸放行(self) -> None:
+        """等到可以发请求为止。冷却期长到无法等待时直接报错。"""
+        import asyncio
+
+        闸 = self._闸()
+        if 闸.冷却中():
+            raise 业务错误(闸.可读提示())
+        等待 = 闸.还需等待()
+        if 等待 > 0:
+            await asyncio.sleep(等待)
+        闸.记录发出()
 
     def _鉴权头(self, 目标营地ID: str | None = None) -> dict[str, str]:
         if self._账号 is None:
@@ -132,6 +161,8 @@ class 营地传输:
         头 = self._鉴权头(目标营地ID)
         头["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
 
+        await self._等闸放行()
+
         异步上下文 = self._http.post(
             f"{主机}{路径}",
             headers=头,
@@ -153,6 +184,8 @@ class 营地传输:
         码 = 载荷.get("returnCode", 0)
         if 码 == 0:
             return
+        if 码 == _账号频控 and self._账号 is not None:
+            全局频控.取账号闸(self._账号["营地ID"]).记频控()
         文案 = _业务错误文案.get(码)
         if 文案 is None:
             文案 = f"营地返回业务码 {码}"
@@ -172,8 +205,8 @@ class 营地传输:
         """
         import uuid
 
-        from ainong.camp.device import 构建设备载荷
-        from ainong.camp.rsa import 分块加密
+        from .device import 构建设备载荷
+        from .rsa import 分块加密
 
         if (平台凭据 is None) == (微信授权码 is None):
             raise ValueError("必须提供平台凭据或微信授权码，且只能提供其中一个")
@@ -228,7 +261,7 @@ class 营地传输:
         if not 数据.get("userId") or not 数据.get("token"):
             raise RuntimeError("营地登录响应里没有账号信息")
 
-        from ainong.camp.encode_res import 取出对称密钥
+        from .encode_res import 取出对称密钥
 
         密钥 = 取出对称密钥(str(数据["encodeRes"]))
         账号 = {

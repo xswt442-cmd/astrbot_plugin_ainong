@@ -135,28 +135,49 @@ class Main(Star):
 
     @command("角色")
     async def 角色(self, event: AstrMessageEvent):
-        """列出该营地账号下的游戏角色。"""
+        """列出该营地账号下的游戏角色。不带参数时只列出，带角色ID则切换到它。"""
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
             yield event.plain_result("还没绑定营地账号，先发 /绑定。")
             return
 
+        参数 = (event.get_message_str() or "").strip().replace("/角色", "").strip()
+
         async with 营地传输() as 传输:
             传输.绑定账号(**{k: 记录[k] for k in ("营地ID", "令牌", "对称密钥")})
-            列表 = await 传输.取角色列表()
+            try:
+                列表 = await 传输.取角色列表()
+            except Exception as exc:
+                yield event.plain_result(f"取角色列表失败：{exc}")
+                return
 
         if not 列表:
             yield event.plain_result("这个营地账号下没有游戏角色。")
             return
 
-        当前 = self._凭据.当前角色(用户)
-        行 = [
-            f"{'（当前）' if 角色['角色ID'] == 当前 else ''}{角色['名称']}"
-            f"｜{角色['区服描述']}｜{角色['角色ID']}"
-            for 角色 in 列表
-        ]
-        yield event.plain_result("游戏角色：\n" + "\n".join(行))
+        if not 参数:
+            当前 = self._凭据.当前角色(用户)
+            行 = [
+                f"{'（当前）' if 角色['角色ID'] == 当前 else ''}{角色['名称']}"
+                f"｜{角色['区服描述']}｜{角色['角色ID']}"
+                for 角色 in 列表
+            ]
+            yield event.plain_result(
+                "游戏角色：\n" + "\n".join(行) + "\n\n发 /角色 <角色ID> 切换。"
+            )
+            return
+
+        匹配 = next((角色 for 角色 in 列表 if 角色["角色ID"] == 参数), None)
+        if 匹配 is None:
+            可用 = "、".join(角色["角色ID"] for 角色 in 列表)
+            yield event.plain_result(f"没有这个角色。可选：{可用}")
+            return
+
+        self._凭据.选角色(用户, 匹配["角色ID"])
+        yield event.plain_result(
+            f"已切到{匹配['名称']}（{匹配['区服描述']}）。发 /战绩 看这个角色的数据。"
+        )
 
     @command("战绩")
     async def 战绩(self, event: AstrMessageEvent):
@@ -173,6 +194,42 @@ class Main(Star):
             战绩展示时返回说明文字。
         """
         return await self._读战绩(event.get_sender_id())
+
+    @command("锐评")
+    async def 锐评(self, event: AstrMessageEvent):
+        """让模型基于近期战绩给一段评价。"""
+        数据 = await self._读战绩(event.get_sender_id())
+        if 数据.startswith(("还没绑定", "提问者还没有", "读取战绩失败")):
+            yield event.plain_result(数据)
+            return
+
+        try:
+            提供方 = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+        except Exception as exc:
+            yield event.plain_result(f"取不到当前对话用的模型：{exc}")
+            return
+
+        提示 = (
+            "下面是这个玩家的王者荣耀近期战绩统计。"
+            "请基于这些数据写一段有话说的锐评：先说数据说明了什么，"
+            "再指出打得好的地方和明显的问题，最后给一条能改进的具体建议。"
+            "语气直接，不要客套，不要复述数据原文，控制在 200 字以内。\n\n"
+            f"{数据}"
+        )
+
+        try:
+            结果 = await self.context.tool_loop_agent(
+                event=event,
+                chat_provider_id=提供方,
+                prompt=提示,
+                max_steps=8,
+            )
+        except Exception as exc:
+            logger.warning(f"[ainong] 锐评失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"锐评失败：{exc}")
+            return
+
+        yield event.plain_result(结果.completion_text or "模型没有返回内容。")
 
     async def _读战绩(self, 用户: str) -> str:
         记录 = self._凭据.读取(用户)

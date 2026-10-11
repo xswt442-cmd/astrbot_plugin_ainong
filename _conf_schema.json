@@ -1,22 +1,8 @@
 {
-  "browser_server_url": {
-    "description": "Playwright 服务地址",
-    "type": "string",
-    "default": "http://playwright:3000",
-    "obvious_hint": true,
-    "hint": "QQ扫码登录需要一个真实浏览器会话。留空则插件不提供QQ扫码，微信扫码不受影响。"
-  },
   "browser_timeout_seconds": {
-    "description": "扫码超时（秒）",
+    "description": "扫码等待时长（秒）",
     "type": "int",
-    "default": 120,
-    "hint": "从二维码发给用户开始计时，超时后关闭浏览器并释放资源。"
-  },
-  "max_concurrent_sessions": {
-    "description": "最大并发扫码会话数",
-    "type": "int",
-    "default": 2,
-    "slider": {"min": 1, "max": 8, "step": 1},
-    "hint": "每个会话独占一个浏览器上下文。超过上限时新请求直接拒绝，不排队。"
+    "default": 180,
+    "hint": "从二维码发出开始计时。二维码本身有效期约五分钟，超时后需要重新发 /绑定。"
   }
 }

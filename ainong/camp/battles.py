@@ -16,9 +16,9 @@ __all__ = ["读战绩", "读战绩摘要"]
 
 营地主站 = "https://kohcamp.qq.com"
 
-_每页场次 = 30
 _最大页数 = 3
-_翻页间隔秒 = 0.4
+# 翻页也要过最小请求间隔，营地按账号限流，间隔不够会触发冷却。
+_翻页间隔秒 = 1.3
 
 
 async def _请求场次(传输, 营地ID: str, 角色ID: str, 游标: int) -> dict[str, Any]:
@@ -40,6 +40,8 @@ async def _请求场次(传输, 营地ID: str, 角色ID: str, 游标: int) -> di
     }
     if 角色ID:
         载荷["roleId"] = 角色ID
+
+    await 传输._等闸放行()
 
     import json
 
