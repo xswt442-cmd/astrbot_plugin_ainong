@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="logo.png" alt="爱农" width="128">
+</div>
+
 # 爱农
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-插件-4D7AFF)](https://github.com/AstrBotDevs/AstrBot)

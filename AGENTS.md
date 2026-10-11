@@ -16,11 +16,15 @@
 - 网络请求只用 `aiohttp`。
 - 持久化数据放 AstrBot 的 `data/plugin_data/ainong/`，不放插件目录。
 - 凭据不写日志、不进异常消息、不进提交。解绑时删文件，不保留。
+- 插件图标必须是根目录的 `logo.png`，文件名与位置都是 AstrBot 硬编码的
+  （`star_manager.py` 里的 `logo_fname`）。WebUI 通过一个 300 秒有效的文件
+  token 拉图，所以体积要小——超过几百 KB 每次刷新都会重传。改图标时改
+  `logo.png`，不要另建目录。
 
 ## 结构
 
 ```
-main.py插件入口，指令组与指令
+main.py             插件入口，指令组与指令
 ainong/crypto/       XXTEA、PKCS#1 块解析
 ainong/auth/         YSDK 签名、微信扫码
 ainong/camp/         营地接口：传输层、频控、战绩
@@ -28,7 +32,7 @@ ainong/stats.py      战绩统计与文本汇总
 ainong/storage.py    凭据与绑定关系
 ainong/verify/       可行性验证脚本，不参与运行
 test/                pytest 用例与真实响应快照
-deploy/              浏览器服务的 compose 片段与 seccomp 配置
+deploy/              浏览器服务的 compose 片段、Dockerfile 与 seccomp 配置
 docs/                更新日志与术语表
 ```
 
