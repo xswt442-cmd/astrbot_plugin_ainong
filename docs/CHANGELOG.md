@@ -22,6 +22,12 @@
 
 - `test/test_message_chain.py` 拦这个错：消息链只能由链式接口构造
 
+### 修复
+
+- `release` 工作流里的 shell 变量名改为 ASCII。GitHub runner 的 bash 不接受
+  非 ASCII 标识符，`版本=v0.1.4` 直接 `command not found`，`$版本` 静默展开成
+  空，于是版本号检查恒失败。约束由 `test/test_workflow_shell.py` 检查
+
 ## [0.1.3] - 2026-10-12
 
 ### 修复
