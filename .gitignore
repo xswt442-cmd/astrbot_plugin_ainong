@@ -10,5 +10,7 @@ build/
 
 # 生成测试向量用的参考实现（第三方代码，不随仓库分发）
 test/gen/
-.probe_*.py
+
+# 临时诊断脚本与日志
+.probe*.py
 .verify.log
