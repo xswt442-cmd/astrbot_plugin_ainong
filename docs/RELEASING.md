@@ -96,12 +96,18 @@ v0.1.3 就只推了标签，Releases 页面停在 v0.1.1。
    | `author` | xswt442-cmd |
    | `repo` | https://github.com/xswt442-cmd/astrbot_plugin_ainong |
    | `astrbot_version` | 可选，`>=4.16,<5` |
+   | `category` | 市场分类，只能填市场那九个中文之一，见下 |
+   | `tags` | 可选，列表。用于市场分类搜索 |
    | `support_platforms` | 可选，`aiocqhttp` 与 `weixin_oc` |
-   | `tags` | 可选，用于市场分类搜索 |
    | `social_link` | 可选，GitHub 主页 |
 
    `short_desc` 也在 `metadata.yaml` 里，界面紧凑时会显示它——一句话，别把
    `desc` 塞进去。
+
+   **分类只能是这九个**：`其他`、`工具`、`娱乐`、`三方集成`、`生活`、
+   `长期记忆`、`知识库`、`AI 增强`、`语音`。填错或漏填都不会让安装失败，
+   只会归到「其他」、在详情页显示成 `[MISSING: ...其他]`，而且要等市场索引
+   刷新才看得到。`test/test_metadata.py` 会校验，别绕开它。
 
 ## 标签发布后能改吗
 
