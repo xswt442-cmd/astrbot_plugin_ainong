@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent
@@ -15,8 +18,6 @@ from astrbot.api.star import Context, Star
 from .ainong.camp.transport import 营地传输
 from .ainong.storage import 凭据仓库
 
-绑定超时秒 = 180
-
 
 class Main(Star):
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
@@ -24,16 +25,22 @@ class Main(Star):
         self.config = config
         self._凭据 = 凭据仓库(self._数据目录())
         self._扫码会话: dict[str, _扫码] = {}
+        # 主动发消息定位会话要的是会话标识，与用户标识不是一回事。
+        self._会话标识: dict[str, str] = {}
 
     def _数据目录(self) -> Path:
         from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
         return Path(get_astrbot_data_path()) / "plugin_data" / "ainong"
 
+    def _扫码超时(self) -> int:
+        return int(self.config.get("browser_timeout_seconds", 180) or 180)
+
     async def terminate(self) -> None:
         for 会话 in list(self._扫码会话.values()):
             await 会话.关闭()
         self._扫码会话.clear()
+        self._会话标识.clear()
 
     # ---------------------------------------------------------------- 绑定
 
@@ -54,18 +61,60 @@ class Main(Star):
             yield event.plain_result("扫码已经在进行中，看上一条消息里的二维码。")
             return
 
-        会话 = _扫码(用户, self.config)
-        self._扫码会话[用户] = 会话
+        会话 = _扫码(self._扫码超时())
         try:
             图片 = await 会话.出码()
         except Exception as exc:
-            self._扫码会话.pop(用户, None)
+            await 会话.关闭()
             yield event.plain_result(f"取二维码失败：{exc}")
             return
 
+        self._扫码会话[用户] = 会话
+        # 主动发消息要的是会话标识，不是用户标识，两者不能混。
+        self._会话标识[用户] = event.unified_msg_origin
+        会话.开始等待(self._收到授权码)
+
         from astrbot.api.message_components import Image
 
-        yield event.chain_result([Image.fromBase64(图片), f"扫码绑定，{绑定超时秒} 秒内有效。"])
+        yield event.chain_result([Image.fromBase64(图片), "用微信扫这个码。"])
+
+    async def _收到授权码(self, 用户: str, 授权码: str) -> None:
+        """扫码完成后登录营地并存凭据。"""
+        from .ainong.camp.transport import 营地传输
+
+        会话 = self._扫码会话.pop(用户, None)
+        if 会话 is None:
+            return
+
+        try:
+            传输 = 营地传输()
+            try:
+                账号 = await 传输.登录(微信授权码=授权码)
+            finally:
+                await 传输.关闭()
+
+            self._凭据.写入(用户, 账号)
+            logger.info(f"[ainong] 用户绑定营地账号 {账号['营地ID']}")
+            await self._通知(用户, f"绑定成功，营地账号 {账号['营地ID']}。发 /战绩 试试。")
+        except Exception as exc:
+            logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
+            await self._通知(用户, f"绑定失败：{exc}")
+        finally:
+            self._会话标识.pop(用户, None)
+            await 会话.关闭()
+
+    async def _通知(self, 用户: str, 文本: str) -> None:
+        """给用户发一条消息。用绑定时记下的会话标识定位会话。"""
+        会话标识 = self._会话标识.get(用户)
+        if not 会话标识:
+            return
+        try:
+            from astrbot.api.message_components import Plain
+            from astrbot.core.message.message_event_result import MessageChain
+
+            await self.context.send_message(会话标识, MessageChain(chain=[Plain(文本)]))
+        except Exception as exc:
+            logger.warning(f"[ainong] 通知用户失败：{type(exc).__name__}: {exc}")
 
     @command("解绑")
     async def 解绑(self, event: AstrMessageEvent):
@@ -74,6 +123,7 @@ class Main(Star):
         会话 = self._扫码会话.pop(用户, None)
         if 会话 is not None:
             await 会话.关闭()
+        self._会话标识.pop(用户, None)
 
         记录 = self._凭据.删除(用户)
         if not 记录:
@@ -141,21 +191,30 @@ class Main(Star):
 
 
 class _扫码:
-    """一次扫码绑定会话。"""
+    """一次扫码绑定会话。
 
-    def __init__(self, 用户: str, config: AstrBotConfig) -> None:
-        self.用户 = 用户
-        self._浏览器地址 = str(config.get("browser_server_url", "") or "")
-        self._超时 = int(config.get("browser_timeout_seconds", 120) or 120)
+    微信出码是纯 HTTP，不需要浏览器：先给用户二维码，再在后台轮询等授权码。
+    出码与等待分成两步，二维码才能立刻发出去。
+    """
+
+    def __init__(self, 超时秒: int) -> None:
+        self._超时 = 超时秒
+        self._会话: Any = None
+        self._待等: asyncio.Task | None = None
 
     async def 出码(self) -> str:
-        """出二维码并等待扫码完成，返回 base64 图片。"""
-        if not self._浏览器地址:
-            raise RuntimeError("未配置浏览器服务，无法扫码")
+        """出二维码，立刻返回 base64 图片。"""
+        from .ainong.auth.wechat_flow import 微信出码会话
 
-        from .ainong.auth.wechat import 扫码出码
+        self._会话 = 微信出码会话()
+        return await self._会话.出码()
 
-        return await 扫码出码(self._浏览器地址, self._超时)
+    def 开始等待(self, 完成: Callable[[str], Any]) -> None:
+        """后台等扫码完成，拿到授权码后回调。"""
+        self._待等 = asyncio.create_task(self._会话.等授权码(self._超时, 完成))
 
     async def 关闭(self) -> None:
-        return
+        if self._待等 is not None:
+            self._待等.cancel()
+        if self._会话 is not None:
+            await self._会话.关闭()
