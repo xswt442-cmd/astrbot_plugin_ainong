@@ -1,42 +1,15 @@
-# 本文件由 uv 自动生成，不要手工编辑。
-# 重新生成：uv export --format requirements.txt --no-hashes --no-dev --no-emit-project --frozen --output-file requirements.txt
-aiohappyeyeballs==2.7.1
-    # via aiohttp
-aiohttp==3.14.5
-    # via astrbot-plugin-ainong
-aiosignal==1.4.0
-    # via aiohttp
-async-timeout==5.0.1 ; python_full_version < '3.11'
-    # via aiohttp
-attrs==26.1.0
-    # via aiohttp
-cffi==2.1.1 ; platform_python_implementation != 'PyPy'
-    # via cryptography
-cryptography==50.0.2
-    # via astrbot-plugin-ainong
-frozenlist==1.8.0
-    # via
-    #   aiohttp
-    #   aiosignal
-idna==3.20
-    # via yarl
-multidict==7.1.0
-    # via
-    #   aiohttp
-    #   yarl
-propcache==0.5.4
-    # via
-    #   aiohttp
-    #   yarl
-pycparser==3.11 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
-    # via cffi
-pyyaml==6.0.3
-    # via astrbot-plugin-ainong
-typing-extensions==4.16.0 ; python_full_version < '3.13'
-    # via
-    #   aiohttp
-    #   aiosignal
-    #   cryptography
-    #   multidict
-yarl==1.25.1
-    # via aiohttp
+# 这个文件由 AstrBot 在安装插件时喂给 pip，是它唯一看的依赖清单。
+#
+# 必须手写，不要用 `uv export` 生成。uv export 会把每个包钉成 `==`，
+# 而 AstrBot 核心自带这些依赖并有版本护栏：插件要求 aiohttp==3.14.5 而核心
+# 装的是 3.14.3，pip 就得动核心的包，护栏拦下，安装直接失败。
+#
+# 所以这里只写范围，让 pip 认为已装的版本已满足、不动手。三个包核心都自带，
+# 声明它们是为了核心换版本时仍能兜住，不是为了升级核心的版本。
+#
+# 改依赖的流程：先改 pyproject.toml（本地 uv sync 用），再同步更新本文件，
+# 两边的直接依赖必须一致，持续集成会检查。
+
+aiohttp>=3.11.18
+cryptography>=42
+pyyaml>=6
