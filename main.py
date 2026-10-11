@@ -12,14 +12,19 @@ from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.event.filter import command, llm_tool
+from astrbot.api.event.filter import command_group, llm_tool
 from astrbot.api.star import Context, Star
+from astrbot.core.star.filter.command import GreedyStr
 
 from .ainong.camp.transport import 营地传输
 from .ainong.storage import 凭据仓库
 
 
 class Main(Star):
+    @command_group("爱农")
+    def 爱农(self):
+        """王者营地战绩查询。指令都在这个组下，不占用通用名字。"""
+
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         super().__init__(context)
         self.config = config
@@ -44,7 +49,7 @@ class Main(Star):
 
     # ---------------------------------------------------------------- 绑定
 
-    @command("绑定")
+    @爱农.command("绑定")
     async def 绑定(self, event: AstrMessageEvent):
         """扫码绑定王者营地账号。"""
         用户 = event.get_sender_id()
@@ -54,7 +59,9 @@ class Main(Star):
 
         已有 = self._凭据.读取(用户)
         if 已有:
-            yield event.plain_result(f"你已经绑定了营地账号 {已有['营地ID']}。要换号先用 /解绑。")
+            yield event.plain_result(
+                f"你已经绑定了营地账号 {已有['营地ID']}。要换号先用 /爱农 解绑。"
+            )
             return
 
         if 用户 in self._扫码会话:
@@ -95,7 +102,7 @@ class Main(Star):
 
             self._凭据.写入(用户, 账号)
             logger.info(f"[ainong] 用户绑定营地账号 {账号['营地ID']}")
-            await self._通知(用户, f"绑定成功，营地账号 {账号['营地ID']}。发 /战绩 试试。")
+            await self._通知(用户, f"绑定成功，营地账号 {账号['营地ID']}。发 /爱农 战绩 试试。")
         except Exception as exc:
             logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
             await self._通知(用户, f"绑定失败：{exc}")
@@ -116,7 +123,7 @@ class Main(Star):
         except Exception as exc:
             logger.warning(f"[ainong] 通知用户失败：{type(exc).__name__}: {exc}")
 
-    @command("解绑")
+    @爱农.command("解绑")
     async def 解绑(self, event: AstrMessageEvent):
         """解除绑定并删除凭据。"""
         用户 = event.get_sender_id()
@@ -133,16 +140,16 @@ class Main(Star):
 
     # ---------------------------------------------------------------- 查询
 
-    @command("角色")
-    async def 角色(self, event: AstrMessageEvent):
+    @爱农.command("角色")
+    async def 角色(self, event: AstrMessageEvent, 角色ID: GreedyStr):
         """列出该营地账号下的游戏角色。不带参数时只列出，带角色ID则切换到它。"""
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
-            yield event.plain_result("还没绑定营地账号，先发 /绑定。")
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定。")
             return
 
-        参数 = (event.get_message_str() or "").strip().replace("/角色", "").strip()
+        参数 = str(角色ID).strip()
 
         async with 营地传输() as 传输:
             传输.绑定账号(**{k: 记录[k] for k in ("营地ID", "令牌", "对称密钥")})
@@ -164,7 +171,7 @@ class Main(Star):
                 for 角色 in 列表
             ]
             yield event.plain_result(
-                "游戏角色：\n" + "\n".join(行) + "\n\n发 /角色 <角色ID> 切换。"
+                "游戏角色：\n" + "\n".join(行) + "\n\n发 /爱农 角色 <角色ID> 切换。"
             )
             return
 
@@ -176,10 +183,10 @@ class Main(Star):
 
         self._凭据.选角色(用户, 匹配["角色ID"])
         yield event.plain_result(
-            f"已切到{匹配['名称']}（{匹配['区服描述']}）。发 /战绩 看这个角色的数据。"
+            f"已切到{匹配['名称']}（{匹配['区服描述']}）。发 /爱农 战绩 看这个角色的数据。"
         )
 
-    @command("战绩")
+    @爱农.command("战绩")
     async def 战绩(self, event: AstrMessageEvent):
         """当前角色的近期战绩摘要。"""
         文本 = await self._读战绩(event.get_sender_id())
@@ -195,7 +202,7 @@ class Main(Star):
         """
         return await self._读战绩(event.get_sender_id())
 
-    @command("锐评")
+    @爱农.command("锐评")
     async def 锐评(self, event: AstrMessageEvent):
         """让模型基于近期战绩给一段评价。"""
         数据 = await self._读战绩(event.get_sender_id())

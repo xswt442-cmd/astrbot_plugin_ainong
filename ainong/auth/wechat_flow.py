@@ -83,13 +83,13 @@ class 微信出码会话:
                 return
             if 状态["终态"]:
                 raise RuntimeError(
-                    "二维码已失效，请重新发 /绑定"
+                    "二维码已失效，请重新发 /爱农 绑定"
                     if 状态["状态"] == "过期"
-                    else "扫码被取消，请重新发 /绑定"
+                    else "扫码被取消，请重新发 /爱农 绑定"
                 )
             await asyncio.sleep(_轮询间隔秒)
 
-        raise TimeoutError("扫码超时，请重新发 /绑定")
+        raise TimeoutError("扫码超时，请重新发 /爱农 绑定")
 
     async def 关闭(self) -> None:
         if self._http is not None and not self._http.closed:
