@@ -1,6 +1,8 @@
 """营地登录用的设备指纹。
 
 这些字段描述一台 Android 设备。营地用它做风控判定，不是账号凭据。
+一次登录的指纹要完整：查询接口用的简版（只有时间戳与随机数）与这里的
+完整载荷不是一回事，不能混用。
 """
 
 from __future__ import annotations
@@ -25,15 +27,23 @@ def 构建设备载荷() -> dict[str, Any]:
         "nonce": f":{secrets.token_hex(16)}:{时间戳}",
         "cDeviceId": 设备ID,
         "deviceid": 设备ID,
+        "cDeviceOaid": 设备ID,
         "cDeviceImei": 设备ID[:15],
         "cDeviceMac": "02:00:00:00:00:00",
+        "wifi_mac": "02:00:00:00:00:00",
         "cDeviceType": "NAN-TG8",
         "cDeviceBrand": "Xiaomi",
         "cDeviceModel": "Xiaomi 13",
+        "cDeviceCPU": "SM8650",
+        "cDeviceMem": "12884901888",
         "cDeviceSystem": "Android 15,level 35",
         "cDeviceLanguage": "zh_CN",
         "cDeviceCountry": "CN",
         "cScreenResolution": "1080*2400",
+        "cScreenWidth": "1080",
+        "cScreenHeight": "2400",
+        "cDevicePPI": "480",
+        "deviceLevel": "3",
         "cNetworkType": "wifi",
         "cDeviceChannel": "10003391",
         "cDeviceVersionName": "10.114.0826",

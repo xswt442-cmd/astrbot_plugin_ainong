@@ -46,6 +46,16 @@ _客户端头 = {
     "tinkerId": "2057971306_64_0",
 }
 
+# 微信路径的客户端参数。营地区分两个来源，版本号不能与 QQ 路径混用。
+_微信客户端头 = {
+    **_客户端头,
+    "cClientVersionCode": "2057957801",
+    "cClientVersionName": "10.111.0323",
+    "cSystemVersionCode": "34",
+    "cSystemVersionName": "14",
+    "tinkerId": "2057957801_64_0",
+}
+
 _公共头 = {
     "Content-Encrypt": "",
     "Accept-Encrypt": "",
@@ -62,7 +72,7 @@ _业务错误文案 = {
 
 
 class 业务错误(Exception):
-    """营��接口返回了失败的业务码。"""
+    """营地接口返回了失败的业务码。"""
 
 
 class 营地传输:
@@ -152,40 +162,57 @@ class 营地传输:
         self,
         *,
         平台凭据: dict[str, str] | None = None,
-        微信: dict[str, str] | None = None,
+        微信授权码: str | None = None,
+        日志标识: str | None = None,
     ) -> dict[str, str]:
-        """登录营地，返回营地账号信息。"""
+        """登录营地，返回营地账号信息。
+
+        两条路径的客户端版本号不同，出码方式也不同：QQ 走 YSDK 换票，
+        微信走官方扫码。营地按这两个值区分来源，不能混用。
+        """
+        import uuid
+
         from ainong.camp.device import 构建设备载荷
         from ainong.camp.rsa import 分块加密
 
+        if (平台凭据 is None) == (微信授权码 is None):
+            raise ValueError("必须提供平台凭据或微信授权码，且只能提供其中一个")
+
+        if 微信授权码 is not None:
+            客户端头 = dict(_微信客户端头)
+            登录类型 = "wx"
+            鉴权字段 = {"code": 微信授权码}
+        else:
+            客户端头 = dict(_客户端头)
+            登录类型 = "openSdk"
+            鉴权字段 = {
+                "accessToken": 平台凭据["accessToken"],
+                "openId": 平台凭据["openId"],
+                "payToken": 平台凭据.get("payToken", ""),
+            }
+
         设备载荷 = json.dumps(构建设备载荷(), separators=(",", ":"))
+        随机数 = str(int(time.time() * 1000))
+        加密载荷 = base64.b64encode(分块加密(设备载荷.encode("utf-8"))).decode("ascii")
+
         表单 = {
-            **_客户端头,
-            "cRand": str(int(time.time() * 1000)),
+            **客户端头,
+            "cRand": 随机数,
             "delOldUser": "0",
             "key1": secrets.token_hex(16),
             "lastLoginTime": "0",
             "lastGetRemarkTime": "0",
-            "specialEncodeParam": base64.b64encode(分块加密(设备载荷.encode("utf-8"))).decode(
-                "ascii"
-            ),
+            "specialEncodeParam": 加密载荷,
+            "loginType": 登录类型,
+            **鉴权字段,
         }
-
-        if 平台凭据 is not None:
-            表单.update(
-                loginType="openSdk",
-                accessToken=平台凭据["accessToken"],
-                openId=平台凭据["openId"],
-                payToken=平台凭据.get("payToken", ""),
-            )
-        elif 微信 is not None:
-            表单.update(loginType="wx", code=微信["code"])
-        else:
-            raise ValueError("必须提供平台凭据或微信授权码")
 
         头 = dict(_公共头)
         头["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
-        头["x-log-uid"] = secrets.token_hex(16).upper()
+        头["x-log-uid"] = 日志标识 or str(uuid.uuid4()).upper()
+        头.update(客户端头)
+        头["cRand"] = 随机数
+        头["specialEncodeParam"] = 加密载荷
 
         import urllib.parse
 
