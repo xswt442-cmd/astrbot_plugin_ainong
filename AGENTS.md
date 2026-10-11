@@ -57,3 +57,5 @@ uv run ruff format --check .     # 格式
 只写中文。`README.md` 说明安装与配置，术语在 `docs/GLOSSARY.md`。
 
 提交用 Conventional Commit 前缀，一次提交一个类型，推送与分支操作需要明确要求。
+发版流程在 `docs/RELEASING.md`；改版本号时 `metadata.yaml` 与 `docs/CHANGELOG.md`
+要一起改。

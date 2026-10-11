@@ -84,7 +84,8 @@ uv run ruff check .
 ```
 
 协作约定见 [AGENTS.md](AGENTS.md)，更新日志见 [docs/CHANGELOG.md](docs/CHANGELOG.md)，
-术语定义见 [docs/GLOSSARY.md](docs/GLOSSARY.md)。
+术语定义见 [docs/GLOSSARY.md](docs/GLOSSARY.md)，发版流程见
+[docs/RELEASING.md](docs/RELEASING.md)。
 
 ## License
 
