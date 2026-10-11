@@ -24,3 +24,11 @@
 
 # 生成物：不计入语言统计，仍正常 diff
 uv.lock linguist-generated=true
+
+# 发布时排除
+#
+# 插件市场从 main 拉 zip（见 docs/RELEASING.md），用户装的是这个包。测试与
+# CI 配置对他们没用，只会占体积、让人以为插件依赖 pytest。
+# deploy/ 不能排除：README 引用了那里的 compose 片段，排除后文档指向空路径。
+test/     export-ignore
+.github/  export-ignore

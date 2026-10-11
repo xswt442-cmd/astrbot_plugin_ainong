@@ -6,21 +6,23 @@
 ## 一次发版会影响什么
 
 - **GitHub Release** —— 手动触发，不自动。
-- **AstrBot 插件市场** —— **不由标签驱动**，要另外向
-  [`AstrBot_Plugins_Collection`](https://github.com/AstrBotDevs/AstrBot_Plugins_Collection)
-  提 PR，把本仓库加进 `plugin_cache_original.json`。市场读的是仓库里的
-  `metadata.yaml`，还有一张单独的图片 URL。
+- **AstrBot 插件市场** —— **不由标签驱动**。要在
+  <https://cloud.astrbot.app/publish> 发布，注册 AstrBot Cloud 账号后填本仓库
+  地址，平台自己解析 `metadata.yaml`。
 
-  市场里的 `logo` 字段长这样：
+  老的 [`AstrBot_Plugins_Collection`](https://github.com/AstrBotDevs/AstrBot_Plugins_Collection)
+  仓库已标注 `DEPRECATED`，README 明确写着「请直接提交到新平台」，不要再去那里提 PR。
 
-  ```
-  https://raw.githubusercontent.com/<账号>/<仓库>/<分支>/logo.png
-  ```
+  平台会校验压缩包体积**不超过 16 MB**，超了直接拒绝发布。本仓库的 zip 远小于
+  这个限制，但改动后值得看一眼——尤其是新增图片或音频资源时。
 
-  两个后果：**文件名必须是 `logo.png`**（文件名由 AstrBot 硬编码），并且
-  **该分支上必须真的有这个文件**——仓库里常见的 `master` / `main` /
-  `default` 都可能，默认分支换了图就 404。这也是发版必须合到 `main` 的原因：
-  留在 `dev` 上市场拿不到图。
+  两条约定：
+
+  - **文件名必须是 `logo.png`。** 这由 AstrBot 硬编码（`star_manager.py` 里的
+    `logo_fname`），改名就不显示。本地装插件和市场上架走的是两套逻辑，但
+    文件名要求一样。
+  - **发版必须合到 `main`。** 平台从 GitHub 仓库取包，`dev` 分支上的东西
+    不会被打进 zip。
 
 ## 清单
 
@@ -69,27 +71,24 @@
 
 7. 在 GitHub 上写 Release。说明取 `docs/CHANGELOG.md` 对应小节的内容。
 
-8. 要进 AstrBot 插件市场，另开一份 PR 到 `AstrBot_Plugins_Collection`，
-   照现有条目的字段写。一条最少要有：
+8. 要进 AstrBot 插件市场，开 <https://cloud.astrbot.app/publish>，填本仓库地址
+   提交。平台自己解析 `metadata.yaml`，所以这些字段要写对：
 
-   ```json
-   "astrbot_plugin_ainong": {
-     "display_name": "爱农",
-     "desc": "查王者营地战绩，让模型替你锐评。",
-     "author": "xswt442-cmd",
-     "repo": "https://github.com/xswt442-cmd/astrbot_plugin_ainong",
-     "tags": ["王者荣耀", "战绩", "锐评"],
-     "version": "v0.1.0",
-     "astrbot_version": ">=4.16",
-     "support_platforms": ["aiocqhttp", "weixin_oc"],
-     "logo": "https://raw.githubusercontent.com/xswt442-cmd/astrbot_plugin_ainong/main/logo.png"
-   }
-   ```
+   | 字段 | 值 |
+   |---|---|
+   | `name` | `astrbot_plugin_ainong`，英文唯一，改了等于换插件 |
+   | `display_name` | 爱农 |
+   | `desc` | 详细描述，支持多行 Markdown |
+   | `version` | 与 `metadata.yaml` 一致，如 `v0.1.0` |
+   | `author` | xswt442-cmd |
+   | `repo` | https://github.com/xswt442-cmd/astrbot_plugin_ainong |
+   | `astrbot_version` | 可选，`>=4.16,<5` |
+   | `support_platforms` | 可选，`aiocqhttp` 与 `weixin_oc` |
+   | `tags` | 可选，用于市场分类搜索 |
+   | `social_link` | 可选，GitHub 主页 |
 
-   `version`、`display_name`、`astrbot_version`、`support_platforms` 要和
-   `metadata.yaml` 一致——市场不会替你校对，不一致时用户装到的是和页面描述
-   不同的东西。`astrbot_version` 的写法比 `metadata.yaml` 宽一点没关系，市场
-   只做展示。
+   `short_desc` 也在 `metadata.yaml` 里，界面紧凑时会显示它——一句话，别把
+   `desc` 塞进去。
 
 ## 标签发布后能改吗
 
@@ -102,9 +101,7 @@
 
 这两个问题在发版前发现代价很小，发出去之后再改就要发新版本：
 
-- **`logo.png` 在 `main` 上真的能访问。** 直接开
-  `https://raw.githubusercontent.com/<账号>/<仓库>/main/logo.png` 看一眼。
-  返回 404 说明分支名或文件名不对，市场里就是一张裂图。
-- **`requirements.txt` 和 `pyproject.toml` 同步。** CI 有这道检查，但值得
-  自己再确认一次：装插件时用的是这个文件，不同步会让用户装到缺包的版本，
-  而开发环境一切正常。
+- **打出来的包会包含什么。** 平台从 `main` 拉 zip。想确认内容就在本地
+  `git archive` 一次看看，别等发出去才发现包里带了不该带的东西。
+  `requirements.txt` 和 `pyproject.toml` 也要同步——CI 有这道检查，但装插件
+  用的是前者，不同步会让用户装到缺包的版本，而开发环境一切正常。
