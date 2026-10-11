@@ -1,0 +1,38 @@
+# 浏览器服务片段
+#
+# 用途：为 QQ 扫码登录提供真实浏览器会话。插件通过 Compose 内部网络访问它，
+# 不暴露任何宿主机端口。
+#
+# 用法：把下面的服务块合并进 AstrBot 的 compose 文件，同一 network 下，
+# 并把 seccomp-profile.json 放到该文件同目录。
+#
+# 版本对应：镜像 tag 与插件 requirements 里的 playwright 版本必须一致。
+# 浏览器由服务端提供，客户端只需要 Python 包；两者版本错配时协议会不兼容。
+#
+# 内存说明：一个 Chromium 会话常驻约 300-500 MiB。2 核 / 2 GiB 的机器上
+# max_concurrent_sessions 应保持 1。下面的 mem_limit 是给单个浏览器进程
+# 设的上限，超出会被内核 OOM 杀掉，不如让它快速失败。
+
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    container_name: ainong-playwright
+    restart: unless-stopped
+    ipc: host
+    # WSGI 服务监听容器内 3000，仅供同网络访问
+    command: >
+      npx --yes playwright@1.63.0 run-server
+      --host=0.0.0.0
+      --port=3000
+    shm_size: 512mb
+    mem_limit: 900m
+    security_opt:
+      - seccomp=seccomp-profile.json
+    # 不写任何 volume：浏览器状态不落盘，会话随容器重建而消失。
+    # 凭据由插件自己持久化，不依赖浏览器侧的 profile。
+    networks:
+      - qq_ai_net
+
+networks:
+  qq_ai_net:
+    driver: bridge
