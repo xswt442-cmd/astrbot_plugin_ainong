@@ -5,7 +5,8 @@
 
 ## 一次发版会影响什么
 
-- **GitHub Release** —— 手动触发，不自动。
+- **GitHub Release** —— 第 6、7 步手动触发，不自动。打标签和建 Release 是两步，
+  都要做。
 - **AstrBot 插件市场** —— **不由标签驱动**。要在
   <https://cloud.astrbot.app/publish> 发布，注册 AstrBot Cloud 账号后填本仓库
   地址，平台自己解析 `metadata.yaml`。
@@ -69,7 +70,21 @@
    在分支提交上打的标签从 `main` 不可达，市场和 GitHub 拿到的就不是同一份代码。
    如果已经打错了，本地删掉这个标签，合并完再打 `main`。
 
-7. 在 GitHub 上写 Release。说明取 `docs/CHANGELOG.md` 对应小节的内容。
+7. 建 GitHub Release。**`git tag` 推上去不等于有 Release** —— 标签只是给某个
+   提交起了个名字，Release 是另一个对象，要在 Releases 页面才看得见。少做这
+   一步，`git tag` 成功了但 Releases 页面仍是旧的，很容易以为已经发完。
+
+   ```sh
+   gh release create vX.Y.Z --title "vX.Y.Z" --notes "<CHANGELOG 对应小节>"
+   ```
+
+   说明直接取 `docs/CHANGELOG.md` 对应小节的内容。发完核对一次：
+
+   ```sh
+   gh release list
+   ```
+
+   最新的那条要显示为 `Latest`，且版本号是刚发的那个。
 
 8. 要进 AstrBot 插件市场，开 <https://cloud.astrbot.app/publish>，填本仓库地址
    提交。平台自己解析 `metadata.yaml`，所以这些字段要写对：
