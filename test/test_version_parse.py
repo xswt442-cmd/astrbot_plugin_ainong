@@ -123,6 +123,19 @@ def test_工作流读_pyproject_用的是_等号():
     )
 
 
+def test_打标签前配了_git_身份():
+    """checkout 只配认证凭据，不配 user.name 与 user.email。
+
+    打标签要生成 tagger，是写操作，缺身份直接报 "Committer identity unknown"
+    退出 128。已实际踩过一次。
+    """
+    工作流 = (仓库根 / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "git config user.name" in 工作流, "打标签前必须配 user.name"
+    assert "git config user.email" in 工作流, "打标签前必须配 user.email"
+    # 顺序：配置必须在 tag 命令之前
+    assert 工作流.index("git config user.name") < 工作流.index("git tag -a")
+
+
 def test_格式不对会报错():
     for 坏 in ("0.1.4", "v0.1", "vx.y.z", "", "v1.2.3-rc1"):
         try:
