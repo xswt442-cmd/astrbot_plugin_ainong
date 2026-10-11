@@ -6,7 +6,7 @@
 
 import pytest
 
-from ainong.stats import 汇总文本, 统计战绩
+from ainong.stats import 映射英雄名, 汇总文本, 统计战绩
 
 
 def _场(
@@ -32,6 +32,58 @@ def _场(
         "gradeGame": 评分,
         "usedTime": 时长秒,
     }
+
+
+class Test映射英雄名:
+    表 = {105: "廉颇", 168: "牛魔"}
+
+    def test_按编号查出名字(self):
+        assert 映射英雄名([{"heroId": 105}], self.表)[0]["heroName"] == "廉颇"
+
+    def test_一次映射多场(self):
+        结果 = 映射英雄名([{"heroId": 105}, {"heroId": 105}], self.表)
+        assert all(场["heroName"] == "廉颇" for 场 in 结果)
+
+    def test_保留原有字段(self):
+        场 = 映射英雄名([{"heroId": 105, "killcnt": 3}], self.表)[0]
+        assert 场["killcnt"] == 3
+
+    def test_查不到时不加名字字段(self):
+        assert "heroName" not in 映射英雄名([{"heroId": 999}], self.表)[0]
+
+    def test_已有名字时不覆盖(self):
+        assert 映射英雄名([{"heroName": "自定义"}], self.表)[0]["heroName"] == "自定义"
+
+    def test_原列表不被修改(self):
+        场次 = [{"heroId": 105}]
+        映射英雄名(场次, self.表)
+        assert "heroName" not in 场次[0]
+
+    def test_空表时原样返回(self):
+        assert 映射英雄名([{"heroId": 105}], {}) == [{"heroId": 105}]
+
+    def test_空列表照常返回(self):
+        assert 映射英雄名([], self.表) == []
+
+
+class Test拉英雄表:
+    def test_取到表后能用编号查名(self):
+        import asyncio
+
+        from ainong.stats import 拉英雄表
+
+        表 = asyncio.run(拉英雄表())
+        if 表:  # 网络不可用时跳过实质断言，只确认不抛异常
+            assert all(isinstance(v, str) for v in 表.values())
+            assert all(isinstance(k, int) for k in 表)
+
+    def test_第二次直接用缓存(self):
+        import asyncio
+
+        from ainong.stats import 拉英雄表
+
+        asyncio.run(拉英雄表())
+        assert asyncio.run(拉英雄表()) is asyncio.run(拉英雄表())
 
 
 class Test统计战绩:

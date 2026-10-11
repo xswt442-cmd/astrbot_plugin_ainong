@@ -7,12 +7,55 @@ token，也更容易从中得出有话说的评价。
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-__all__ = ["统计战绩", "汇总文本"]
+__all__ = ["拉英雄表", "映射英雄名", "统计战绩", "汇总文本"]
+
+_英雄表地址 = "https://pvp.qq.com/web201605/js/herolist.json"
 
 _常用英雄上限 = 5
 _保留一位小数 = 1
+
+_英雄表缓存: dict[int, str] | None = None
+
+
+async def 拉英雄表() -> dict[int, str]:
+    """取官方英雄编号到中文名的对照表。
+
+    战绩接口只给英雄编号不给名字，模型看到数字没法判断，所以要映射。
+    这张表是公开静态资源，取一次缓存在进程内。
+    """
+    global _英雄表缓存
+    if _英雄表缓存 is not None:
+        return _英雄表缓存
+
+    import aiohttp
+
+    try:
+        async with aiohttp.ClientSession() as 会话:
+            async with 会话.get(_英雄表地址) as 响应:
+                响应.raise_for_status()
+                条目 = json.loads(await 响应.text())
+    except Exception:
+        return {}
+
+    _英雄表缓存 = {int(项["ename"]): str(项["cname"]) for 项 in 条目 if "ename" in 项}
+    return _英雄表缓存
+
+
+def 映射英雄名(场次: list[dict[str, Any]], 表: dict[int, str] | None = None) -> list[dict]:
+    """给场次补上英雄名。查不到时保持原样，编号仍然可用。"""
+    表 = 表 or {}
+    结果 = []
+    for 场 in 场次:
+        新场 = dict(场)
+        if not 新场.get("heroName"):
+            名 = 表.get(int(新场["heroId"])) if 新场.get("heroId") else None
+            if 名:
+                新场["heroName"] = 名
+        结果.append(新场)
+    return 结果
 
 
 def _胜(场: dict[str, Any]) -> bool:

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..stats import 汇总文本, 统计战绩
+from ..stats import 拉英雄表, 映射英雄名, 汇总文本, 统计战绩
 
 __all__ = ["读战绩", "读战绩摘要"]
 
@@ -88,13 +88,13 @@ async def 读战绩(传输, 角色ID: str = "", 页数: int = 1) -> list[dict[st
 async def 读战绩摘要(传输, 角色ID: str = "") -> str:
     """取近期战绩并折成模型可读的文本。"""
     场次 = await 读战绩(传输, 角色ID, 页数=2)
+    场次 = 映射英雄名(场次, await 拉英雄表())
     统计 = 统计战绩(场次)
 
     段位 = ""
-    巅峰分 = ""
     for 场 in 场次:
         if 场.get("roleJobName"):
             段位 = str(场["roleJobName"])
             break
 
-    return 汇总文本(统计, 段位=段位, 巅峰分=巅峰分)
+    return 汇总文本(统计, 段位=段位)
