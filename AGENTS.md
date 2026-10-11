@@ -26,7 +26,7 @@
 ```
 main.py             插件入口，指令组与指令
 ainong/crypto/       XXTEA、PKCS#1 块解析
-ainong/auth/         YSDK 签名、微信扫码
+ainong/auth/         YSDK 签名、微信扫码、扫码会话生命周期
 ainong/camp/         营地接口：传输层、频控、战绩
 ainong/stats.py      战绩统计与文本汇总
 ainong/storage.py    凭据与绑定关系
@@ -35,6 +35,16 @@ test/                pytest 用例与真实响应快照
 deploy/              浏览器服务的 compose 片段、Dockerfile 与 seccomp 配置
 docs/                更新日志与术语表
 ```
+
+## 两条容易踩的顺序约束
+
+`main.py` 跑不了单测（顶层 import astrbot，本地没这个包），所以下面两条靠
+`test/test_main_wiring.py` 做源码检查，改动时别把顺序写反。
+
+- **`_通知` 必须在 `_清理会话` 之前。** 通知依赖 `_事件` 与 `_会话标识`，
+  清理会把两者 pop 掉。
+- **扫码回调只能是单参协程。** `等授权码` 按 `完成(授权码)` 调用，回调要写成
+  协程，用户标识用闭包绑掉。
 
 ## 验证
 

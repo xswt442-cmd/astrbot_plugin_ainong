@@ -18,7 +18,7 @@ from astrbot.core.star.filter.command import GreedyStr
 
 # 全部在模块顶层导入。插件加载时就把整个包摸清：少文件、依赖缺失都在启动
 # 阶段报错，而不是等用户发了指令才在懒加载里抛模块不存在。
-from .ainong.auth.wechat_flow import 微信出码会话
+from .ainong.auth.scan_session import 扫码会话
 from .ainong.camp.battles import 读战绩摘要
 from .ainong.camp.transport import 营地传输
 from .ainong.storage import 凭据仓库
@@ -40,7 +40,10 @@ _帮助文本 = """爱农 · 王者营地战绩
   让模型基于上面的数据写一段评价，指出打得好的地方和明显的问题。
 
 /爱农 解绑
-  解除绑定并立即删除本地凭据。
+  解除绑定并立即删除本地凭据。扫码卡住时也可以用它清掉当前会话。
+
+/爱农 状态
+  看自己的标识、绑定情况和有没有卡住的扫码会话。排查用。
 
 /爱农 帮助
   就是这条。
@@ -57,8 +60,11 @@ class Main(Star):
         super().__init__(context)
         self.config = config
         self._凭据 = 凭据仓库(self._数据目录())
-        self._扫码会话: dict[str, _扫码] = {}
-        # 主动发消息定位会话要的是会话标识，与用户标识不是一回事。
+        self._扫码会话: dict[str, 扫码会话] = {}
+        # 留着原始事件，扫码完成后用它回复。QQ 官方 bot 的主动消息要群授权、
+        # 每条还消耗额度（日志里是「主动消息失败, 无权限」），而带 msg_id 的
+        # 被动回复不需要。两者用时不同，所以事件和会话标识都留着。
+        self._事件: dict[str, AstrMessageEvent] = {}
         self._会话标识: dict[str, str] = {}
 
     def _数据目录(self) -> Path:
@@ -73,6 +79,7 @@ class Main(Star):
         for 会话 in list(self._扫码会话.values()):
             await 会话.关闭()
         self._扫码会话.clear()
+        self._事件.clear()
         self._会话标识.clear()
 
     # ---------------------------------------------------------------- 绑定
@@ -98,10 +105,13 @@ class Main(Star):
             return
 
         if 用户 in self._扫码会话:
-            yield event.plain_result("扫码已经在进行中，看上一条消息里的二维码。")
+            yield event.plain_result(
+                "扫码已经在进行中，看上一条消息里的二维码。如果那张码已经失效，"
+                "发 /爱农 解绑 清掉当前会话后重试。"
+            )
             return
 
-        会话 = _扫码(self._扫码超时())
+        会话 = 扫码会话(self._扫码超时())
         try:
             图片 = await 会话.出码()
         except Exception as exc:
@@ -110,14 +120,46 @@ class Main(Star):
             return
 
         self._扫码会话[用户] = 会话
-        # 主动发消息要的是会话标识，不是用户标识，两者不能混。
+        # 两种回话方式要用的东西不一样：event 走被动回复（带 msg_id，不需要
+        # 主动消息权限），会话标识走主动消息兜底。
+        self._事件[用户] = event
         self._会话标识[用户] = event.unified_msg_origin
-        会话.开始等待(self._收到授权码)
+
+        # 回调只收授权码，用户标识在这里绑掉。原来直接把 _收到授权码 传进去，
+        # 而它要 (用户, 授权码) 两个参数，等授权码只传一个，调用即 TypeError；
+        # 后台 task 崩了没人收，用户看到"扫码已登上"却没绑定成功，日志里只有
+        # 一行 Traceback。绑成零参在这里，出错也由下面的兜底通知用户。
+        async def _完成(授权码: str) -> None:
+            await self._收到授权码(用户, 授权码)
+
+        会话.开始等待(_完成, self._扫码失败(用户))
 
         # 用链式接口而不是 event.chain_result([...])：后者要的是消息组件列表，
         # 塞裸字符串进去，发送前的日志环节会 AttributeError 崩掉整条流水线，
         # 用户那边只看到没反应。组件由这里的接口负责转换。
-        yield (event.plain_result("用微信扫这个码，扫完等一会儿。").base64_image(图片))
+        yield (
+            event.plain_result(
+                "用微信扫这个码，扫完等一会儿。\n"
+                "扫完我会自动回你结果；如果一直没反应，发 /爱农 状态 查一下。"
+            ).base64_image(图片)
+        )
+
+    def _扫码失败(self, 用户: str) -> Callable[[BaseException], Any]:
+        """后台等待出问题时清场并告知用户。
+
+        原来这类异常只是让 task 静默崩掉：不清理 _扫码会话，用户再发绑定
+        只会一直看到"扫码已经在进行中"，而他其实什么都没在扫。
+        """
+
+        async def _处理(exc: BaseException) -> None:
+            if isinstance(exc, asyncio.CancelledError):
+                raise exc
+            logger.warning(f"[ainong] 扫码等待失败：{type(exc).__name__}: {exc}")
+            # 先通知再清理：_通知 依赖 _事件 与 _会话标识，清理会把它们丢掉。
+            await self._通知(用户, f"扫码没走完：{exc}\n发 /爱农 状态 可以随时查进度。")
+            await self._清理会话(用户, 会话=self._扫码会话.pop(用户, None))
+
+        return _处理
 
     async def _收到授权码(self, 用户: str, 授权码: str) -> None:
         """扫码完成后登录营地并存凭据。"""
@@ -139,36 +181,82 @@ class Main(Star):
             logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
             await self._通知(用户, f"绑定失败：{exc}")
         finally:
-            self._会话标识.pop(用户, None)
+            await self._清理会话(用户, 会话)
+
+    async def _清理会话(self, 用户: str, 会话: 扫码会话 | None) -> None:
+        """关掉会话、丢掉事件与会话标识。
+
+        三样都要丢。事件持有平台侧的上下文，留着既可能让通知发到上一轮的
+        会话里去，也长期占着平台对象不放。
+        """
+        self._事件.pop(用户, None)
+        self._会话标识.pop(用户, None)
+        if 会话 is not None:
             await 会话.关闭()
 
     async def _通知(self, 用户: str, 文本: str) -> None:
-        """给用户发一条消息。用绑定时记下的会话标识定位会话。"""
+        """扫码完成后告诉用户结果。
+
+        两条路，按可靠性排：
+
+        1. 用原始事件回复。带 msg_id 走的是被动回复，不需要主动消息权限。
+           QQ 官方 bot 在群里的主动消息要群授权、每条还消耗额度，实测报
+           「主动消息失败, 无权限」（40034105），所以这条路必须先试。
+           代价是有时效——扫码久了 msg_id 就失效了。
+        2. 用会话标识主动发。作为兜底，但在群里同样可能被拒。
+
+        两条都不通时只记日志。用户可以发 /爱农 状态 自己查。
+        """
+        from astrbot.api.message_components import Plain
+        from astrbot.core.message.message_event_result import MessageChain
+
+        事件 = self._事件.get(用户)
+        if 事件 is not None:
+            try:
+                await 事件.send(MessageChain(chain=[Plain(文本)]))
+                return
+            except Exception as exc:
+                logger.info(f"[ainong] 被动回复失败，试主动发送：{type(exc).__name__}: {exc}")
+
         会话标识 = self._会话标识.get(用户)
         if not 会话标识:
             return
         try:
-            from astrbot.api.message_components import Plain
-            from astrbot.core.message.message_event_result import MessageChain
-
             await self.context.send_message(会话标识, MessageChain(chain=[Plain(文本)]))
         except Exception as exc:
-            logger.warning(f"[ainong] 通知用户失败：{type(exc).__name__}: {exc}")
+            logger.warning(f"[ainong] 主动通知用户失败：{type(exc).__name__}: {exc}")
 
     @爱农.command("解绑")
     async def 解绑(self, event: AstrMessageEvent):
         """解除绑定并删除凭据。"""
         用户 = event.get_sender_id()
-        会话 = self._扫码会话.pop(用户, None)
-        if 会话 is not None:
-            await 会话.关闭()
-        self._会话标识.pop(用户, None)
+        await self._清理会话(用户, self._扫码会话.pop(用户, None))
 
         记录 = self._凭据.删除(用户)
         if not 记录:
             yield event.plain_result("你还没有绑定营地账号。")
             return
         yield event.plain_result(f"已解绑，凭据已删除（营地账号 {记录['营地ID']}）。")
+
+    @爱农.command("状态", alias={"status"})
+    async def 状态(self, event: AstrMessageEvent):
+        """看当前绑定与扫码会话的情况。排查用。"""
+        用户 = event.get_sender_id()
+        记录 = self._凭据.读取(用户)
+
+        行 = [f"你的标识：{用户 or '（拿不到）'}"]
+        if 记录:
+            行.append(
+                f"已绑定营地账号 {记录['营地ID']}，"
+                f"当前角色 {记录.get('角色ID') or '（未选择，用 /爱农 角色 选）'}"
+            )
+        else:
+            行.append("未绑定营地账号")
+
+        if 用户 in self._扫码会话:
+            行.append("有一个扫码会话在进行中。卡住的话发 /爱农 解绑 清掉它。")
+
+        yield event.plain_result("\n".join(行))
 
     # ---------------------------------------------------------------- 查询
 
@@ -282,31 +370,3 @@ class Main(Star):
             except Exception as exc:
                 logger.warning(f"[ainong] 读战绩失败：{type(exc).__name__}: {exc}")
                 return f"读取战绩失败：{exc}"
-
-
-class _扫码:
-    """一次扫码绑定会话。
-
-    微信出码是纯 HTTP，不需要浏览器：先给用户二维码，再在后台轮询等授权码。
-    出码与等待分成两步，二维码才能立刻发出去。
-    """
-
-    def __init__(self, 超时秒: int) -> None:
-        self._超时 = 超时秒
-        self._会话: Any = None
-        self._待等: asyncio.Task | None = None
-
-    async def 出码(self) -> str:
-        """出二维码，立刻返回 base64 图片。"""
-        self._会话 = 微信出码会话()
-        return await self._会话.出码()
-
-    def 开始等待(self, 完成: Callable[[str], Any]) -> None:
-        """后台等扫码完成，拿到授权码后回调。"""
-        self._待等 = asyncio.create_task(self._会话.等授权码(self._超时, 完成))
-
-    async def 关闭(self) -> None:
-        if self._待等 is not None:
-            self._待等.cancel()
-        if self._会话 is not None:
-            await self._会话.关闭()
