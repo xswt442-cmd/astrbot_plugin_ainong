@@ -56,7 +56,11 @@ jobs:
           set -euo pipefail
           bare=${ver#v}
 
-          meta=$(grep '^version:' metadata.yaml | awk '{print $2}')
+          meta=$(grep -E '^version:' metadata.yaml | awk '{print $2}' || true)
+          if [[ -z "$meta" ]]; then
+            echo "::error::metadata.yaml 里读不到 version 字段。"
+            exit 1
+          fi
           if [[ "$meta" != "$ver" ]]; then
             echo "::error::metadata.yaml 是 $meta，要 $ver。"
             exit 1
@@ -68,7 +72,10 @@ jobs:
             exit 1
           fi
 
-          pkgver=$(grep '^version:' pyproject.toml | awk '{print $2}')
+          # pyproject.toml 是 TOML，用 `version = "x"`，冒号是 YAML 的写法。
+          # 之前按 metadata.yaml 的格式去 grep，匹配不到；又因为 pipefail，
+          # grep 一失败整步直接退出，连错误提示都打不出来。
+          pkgver=$(grep -E '^version[[:space:]]*=' pyproject.toml | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/')
           if [[ "$pkgver" != "$bare" ]]; then
             echo "::error::pyproject.toml 是 $pkgver，要 $bare（两处都不带 v）。"
             exit 1
