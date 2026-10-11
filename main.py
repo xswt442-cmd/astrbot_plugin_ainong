@@ -16,8 +16,36 @@ from astrbot.api.event.filter import command_group, llm_tool
 from astrbot.api.star import Context, Star
 from astrbot.core.star.filter.command import GreedyStr
 
+# 全部在模块顶层导入。插件加载时就把整个包摸清：少文件、依赖缺失都在启动
+# 阶段报错，而不是等用户发了指令才在懒加载里抛模块不存在。
+from .ainong.auth.wechat_flow import 微信出码会话
+from .ainong.camp.battles import 读战绩摘要
 from .ainong.camp.transport import 营地传输
 from .ainong.storage import 凭据仓库
+
+_帮助文本 = """爱农 · 王者营地战绩
+
+/爱农 绑定
+  微信扫码绑定你自己的营地账号，出二维码后用微信扫。
+  一个 Bot 用户对应一个营地账号，账号下的多个游戏角色可以切换。
+
+/爱农 角色 [角色ID]
+  不带参数：列出这个营地账号下的游戏角色，标出当前选中的。
+  带角色ID：切换到该角色，之后的查询都看它。
+
+/爱农 战绩
+  当前角色的近期战绩摘要：胜率、KDA、模式分布、英雄池、MVP 与连败。
+
+/爱农 锐评
+  让模型基于上面的数据写一段评价，指出打得好的地方和明显的问题。
+
+/爱农 解绑
+  解除绑定并立即删除本地凭据。
+
+/爱农 帮助
+  就是这条。
+
+直接问模型「我的王者战绩怎么样」也会走同一套数据。"""
 
 
 class Main(Star):
@@ -48,6 +76,11 @@ class Main(Star):
         self._会话标识.clear()
 
     # ---------------------------------------------------------------- 绑定
+
+    @爱农.command("帮助", alias={"help", "菜单"})
+    async def 帮助(self, event: AstrMessageEvent):
+        """列出所有指令。"""
+        yield event.plain_result(_帮助文本)
 
     @爱农.command("绑定")
     async def 绑定(self, event: AstrMessageEvent):
@@ -87,8 +120,6 @@ class Main(Star):
 
     async def _收到授权码(self, 用户: str, 授权码: str) -> None:
         """扫码完成后登录营地并存凭据。"""
-        from .ainong.camp.transport import 营地传输
-
         会话 = self._扫码会话.pop(用户, None)
         if 会话 is None:
             return
@@ -243,8 +274,6 @@ class Main(Star):
         if not 记录:
             return "提问者还没有绑定王者营地账号，无法查询战绩。"
 
-        from .ainong.camp.battles import 读战绩摘要
-
         async with 营地传输() as 传输:
             传输.绑定账号(**{k: 记录[k] for k in ("营地ID", "令牌", "对称密钥")})
             try:
@@ -268,8 +297,6 @@ class _扫码:
 
     async def 出码(self) -> str:
         """出二维码，立刻返回 base64 图片。"""
-        from .ainong.auth.wechat_flow import 微信出码会话
-
         self._会话 = 微信出码会话()
         return await self._会话.出码()
 
