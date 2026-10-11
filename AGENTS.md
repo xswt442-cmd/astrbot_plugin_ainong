@@ -14,8 +14,12 @@ ainong/
   camp/                 营地接口：传输层、设备指纹、分块 RSA、encodeRes
   verify/               可行性验证脚本，不参与插件运行
 test/                   pytest 用例与测试向量
-deploy/                 浏览器服务的 compose 片段与seccomp 配置
+deploy/                 浏览器服务的 compose 片段与 seccomp 配置
+docs/                   CHANGELOG 与术语表
 ```
+
+包内一律用相对导入。插件目录被 AstrBot 当成包加载，顶层包名在容器里
+import 不到。
 
 `verify/` 不是运行时的一部分，它验证协议链路是否可用。跑通了就不再需要它，
 但保留下来作为协议变更后的回归手段。
@@ -47,7 +51,7 @@ deploy/                 浏览器服务的 compose 片段与seccomp 配置
 ## 文档
 
 只写中文，不维护英文版。`README.md` 说明这是什么、怎么装、怎么配、怎么开发。
-术语定义在 `GLOSSARY.md`，改动术语时同步更新。
+术语定义在 `docs/GLOSSARY.md`，改动术语时同步更新。
 
 ## 提交
 

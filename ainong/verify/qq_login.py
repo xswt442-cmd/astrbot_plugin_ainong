@@ -27,10 +27,10 @@ import time
 
 import aiohttp
 
-from ainong.auth.ysdk import YSDK_URL, build_auth_headers
-from ainong.camp.transport import 营地传输
-from ainong.verify.browser import 浏览器会话
-from ainong.verify.qr_server import 启动, 开浏览器
+from ..auth.ysdk import YSDK_URL, build_auth_headers
+from ..camp.transport import 营地传输
+from .browser import 浏览器会话
+from .qr_server import 启动, 开浏览器
 
 QQ_APP_ID = "1105200115"
 QQ_LOGIN_URL = (

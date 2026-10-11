@@ -17,8 +17,8 @@ import base64
 import binascii
 import json
 
-from ainong.camp.rsa import 载入公钥
-from ainong.crypto.pkcs1 import strip_pkcs1_padding
+from ..crypto.pkcs1 import strip_pkcs1_padding
+from .rsa import 载入公钥
 
 __all__ = ["取出对称密钥"]
 

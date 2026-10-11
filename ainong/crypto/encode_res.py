@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from ainong.crypto.pkcs1 import strip_pkcs1_padding
+from .pkcs1 import strip_pkcs1_padding
 
 __all__ = ["extract_user_key"]
 

@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlparse
 
 from playwright.async_api import async_playwright
 
-from ainong.verify.selectors import 找二维码图片元素
+from .selectors import 找二维码图片元素
 
 __all__ = ["浏览器会话"]
 
