@@ -6,7 +6,15 @@
 
 import pytest
 
-from ainong.stats import 映射英雄名, 汇总文本, 统计战绩
+from ainong.stats import (
+    占优项数,
+    对比文本,
+    对比要点,
+    抽对局结果,
+    映射英雄名,
+    汇总文本,
+    统计战绩,
+)
 
 
 def _场(
@@ -202,3 +210,297 @@ class Test汇总文本:
     def test_不需要星级或表情符号(self):
         文本 = 汇总文本(统计战绩([_场()]))
         assert "*" not in 文本
+
+
+class Test更细的维度:
+    """升级后新增的统计项。
+
+    营地接口各版本字段不一致，取不到的项**不能拿 0 充数**——0 是个合法的
+    数据，「这一项没有」不是。所以下面一半的测试在盯「缺字段时不出现」。
+    """
+
+    def test_有死亡时算KDA(self):
+        场次 = [_场(击杀=3, 死亡=3, 助攻=6), _场(击杀=3, 死亡=3, 助攻=6)]
+        assert 统计战绩(场次)["KDA"] == pytest.approx(3.0)
+
+    def test_零死亡时KDA不算成无穷(self):
+        """一场没死过，KDA 记作击杀+助攻，别让文本里冒出 inf。"""
+        结果 = 统计战绩([_场(击杀=4, 死亡=0, 助攻=3)])
+        assert 结果["KDA"] == pytest.approx(7.0)
+
+    def test_走势是最新在前(self):
+        场次 = [_场(胜=True), _场(胜=True), _场(胜=False), _场(胜=True)]
+        结果 = 统计战绩(场次)
+        assert 结果["最近走势"] == [True, True, False, True]
+        assert 结果["走势文本"] == "胜胜负胜"
+
+    def test_走势最多取十场(self):
+        结果 = 统计战绩([_场()] * 25)
+        assert len(结果["最近走势"]) == 10
+
+    def test_最长连胜跨过失败继续数(self):
+        场次 = [_场(胜=True)] * 2 + [_场(胜=False)] + [_场(胜=True)] * 5
+        结果 = 统计战绩(场次)
+        assert 结果["最长连胜"] == 5
+        assert 结果["当前连胜"] == 2
+
+    def test_星数取最新一场(self):
+        场次 = [{**_场(), "stars": 3}, {**_场(), "stars": 1}]
+        assert 统计战绩(场次)["星数"] == pytest.approx(3.0)
+
+    def test_巅峰分取最新一场(self):
+        场次 = [
+            {**_场(), "mapName": "巅峰赛", "newMasterMatchScore": 1652},
+            {**_场(), "mapName": "巅峰赛", "newMasterMatchScore": 1600},
+        ]
+        assert 统计战绩(场次)["巅峰分"] == pytest.approx(1652.0)
+
+    def test_没打过巅峰赛时不报巅峰分(self):
+        """列表接口每场都带 newMasterMatchScore，没打过的号全是 1200 初始分。
+
+        照直显示等于告诉模型「这人巅峰 1200」，而事实是他根本没打过。
+        """
+        场次 = [{**_场(), "newMasterMatchScore": 1200, "mapName": "排位赛 五排"}]
+        assert 统计战绩(场次)["巅峰分"] is None
+
+    def test_有巅峰赛场次时才报巅峰分(self):
+        场次 = [
+            {**_场(), "mapName": "巅峰赛", "newMasterMatchScore": 1652},
+            {**_场(), "mapName": "排位赛 五排", "newMasterMatchScore": 1200},
+        ]
+        assert 统计战绩(场次)["巅峰分"] == pytest.approx(1652.0)
+
+    def test_奖牌从图地址里解出等级和职业(self):
+        """奖牌图地址形如 `.../evaluateV3/silver_archer.png`，等级与职业都写在里面。"""
+        场次 = [
+            {**_场(), "evaluateUrl": "http://x/evaluate-v2/gold_warrior_1.png"},
+            {**_场(), "evaluateUrl": "http://x/evaluate-v2/silver_archer_1.png"},
+            {**_场(), "evaluateUrl": "http://x/evaluate-v2/gold_warrior_1.png"},
+        ]
+        结果 = 统计战绩(场次)
+        assert 结果["奖牌"] == {"金牌": 2, "银牌": 1}
+        assert 结果["奖牌位置"][0] == ("战士", 2)
+
+    def test_没有奖牌图时不编(self):
+        结果 = 统计战绩([_场()])
+        assert 结果["奖牌"] == {}
+        assert 结果["奖牌位置"] == []
+
+    def test_高光数各类标记(self):
+        场次 = [
+            {**_场(), "firstBlood": 1, "hero1TripleKillCnt": 1},
+            {**_场(), "godLikeCnt": 1, "hero1UltraKillCnt": 1},
+            _场(),
+        ]
+        assert 统计战绩(场次)["高光"] == {"一血": 1, "超神": 1, "三杀": 1, "四杀": 1}
+
+    def test_局内评价按场次降序且不留空名(self):
+        场次 = [_场(), _场(), _场(), {**_场(), "desc": "实力局"}, {**_场(), "desc": "实力局"}]
+        评价 = 统计战绩(场次)["局内评价"]
+        assert 评价[0] == ("实力局", 2)
+        assert all(名 for 名, _ in 评价), "评价为空的行不该进列表"
+
+    def test_缺字段时这些项是_None_而不是_0(self):
+        结果 = 统计战绩([_场()])
+        assert 结果["星数"] is None
+        assert 结果["巅峰分"] is None
+
+    def test_空列表也带着这些键(self):
+        结果 = 统计战绩([])
+        for 键 in ("KDA", "最长连胜", "最近走势", "奖牌", "高光", "局内评价", "星数", "巅峰分"):
+            assert 键 in 结果
+
+    def test_统计败方MVP当作SVP(self):
+        """接口里没有 svp 字段，败方 MVP 叫 losemvp（实测与 mvpUrlV2 里的 svp 图一致）。"""
+        场次 = [{**_场(), "losemvp": 1}, _场(), {**_场(), "losemvp": 1}]
+        assert 统计战绩(场次)["svp次数"] == 2
+
+
+class Test汇总文本的新维度:
+    def test_带上走势(self):
+        文本 = 汇总文本(统计战绩([_场(胜=True), _场(胜=False)]))
+        assert "最近 2 场：胜负" in 文本
+
+    def test_段位带星数(self):
+        文本 = 汇总文本(统计战绩([{**_场(), "stars": 3}]), 段位="至尊星耀V")
+        assert "至尊星耀V 3星" in 文本
+
+    def test_有巅峰分时显示(self):
+        场次 = [{**_场(), "mapName": "巅峰赛", "newMasterMatchScore": 1652}]
+        assert "1652" in 汇总文本(统计战绩(场次))
+
+    def test_巅峰分是初始分时不显示(self):
+        文本 = 汇总文本(统计战绩([{**_场(), "newMasterMatchScore": 1200}]))
+        assert "巅峰分" not in 文本
+
+    def test_奖牌与高光各占一行(self):
+        场次 = [
+            {**_场(), "evaluateUrl": "http://x/gold_warrior_1.png", "firstBlood": 1},
+            {**_场(), "evaluateUrl": "http://x/silver_mage_1.png", "godLikeCnt": 1},
+        ]
+        文本 = 汇总文本(统计战绩(场次))
+        assert "奖牌：金牌 1 次、银牌 1 次" in 文本
+        assert "高光：一血 1 次、超神 1 次" in 文本
+
+    def test_局内评价进文本(self):
+        场次 = [{**_场(), "desc": "实力局"}] * 3 + [{**_场(), "desc": "翻车局"}]
+        文本 = 汇总文本(统计战绩(场次))
+        assert "局内评价：实力局 3 场、翻车局 1 场" in 文本
+
+    def test_缺字段时不出现这些字样(self):
+        文本 = 汇总文本(统计战绩([_场()]))
+        for 字样 in ("参团", "分均", "奖牌", "高光", "局内评价", "巅峰分", "星"):
+            assert 字样 not in 文本, f"没有这项数据，不该出现「{字样}」"
+
+    def test_模式超过三个时合并成其他(self):
+        # 模式按场次降序，前三是 巅峰赛5 / 五排4 / 双排3，剩下的三排2 归入「其他」。
+        场次 = (
+            [_场(模式="排位赛 五排")] * 4
+            + [_场(模式="排位赛 双排")] * 3
+            + [_场(模式="排位赛 三排")] * 2
+            + [_场(模式="巅峰赛")] * 5
+        )
+        文本 = 汇总文本(统计战绩(场次))
+        assert "其他2场" in 文本
+        assert "三排" not in 文本.split("模式：")[1].split("\n")[0]
+
+    def test_最长连胜和当前连胜相同时不重复说(self):
+        文本 = 汇总文本(统计战绩([_场(胜=True)] * 6))
+        assert "当前连胜 6 场" in 文本
+        assert "最长连胜" not in 文本
+
+    def test_最长连胜更大时才单独说(self):
+        场次 = [_场(胜=True)] * 2 + [_场(胜=False)] * 2 + [_场(胜=True)] * 5
+        文本 = 汇总文本(统计战绩(场次))
+        assert "最长连胜 5 场" in 文本
+        assert "当前连胜 2 场" in 文本
+
+    def test_MVP_带占比(self):
+        文本 = 汇总文本(统计战绩([{**_场(MVP=1)}] * 10))
+        assert "MVP 10 次（100.0%）" in 文本
+
+    def test_短样本不写MVP占比(self):
+        """三场里两次 MVP 不代表 66% 的 MVP 率，别误导模型。"""
+        文本 = 汇总文本(统计战绩([{**_场(MVP=1)}, {**_场(MVP=1)}, _场()]))
+        assert "MVP 2 次" in 文本
+        assert "（" not in 文本.split("MVP")[1].split("\n")[0]
+
+
+class Test逐项对比:
+    """PK 的对比由代码算死，不交给模型。
+
+    线上实测：把两份数据丢给模型让它自己比，它给的分数是 83 对 87 —— 看不出
+    输赢，点评也是「各有千秋」那一路。所以对比必须在这里算清楚。
+    """
+
+    def _甲(self):
+        return 统计战绩(
+            [
+                {
+                    "gameresult": 1,
+                    "heroName": "牛魔",
+                    "killcnt": 2,
+                    "deadcnt": 4,
+                    "assistcnt": 11,
+                    "gradeGame": 7.6,
+                    "usedTime": 900,
+                    "mvpcnt": 1,
+                }
+            ]
+            * 10
+        )
+
+    def _乙(self):
+        return 统计战绩(
+            [
+                {
+                    "gameresult": 2,
+                    "heroName": "铠",
+                    "killcnt": 6,
+                    "deadcnt": 2,
+                    "assistcnt": 3,
+                    "gradeGame": 9.0,
+                    "usedTime": 900,
+                    "mvpcnt": 0,
+                }
+            ]
+            * 10
+        )
+
+    def test_每项都指明谁占优(self):
+        要点 = 对比要点("甲", self._甲(), "乙", self._乙())
+        assert 要点, "应该比出若干项"
+        for 条 in 要点:
+            assert 条["优"] in ("甲", "乙", "持平"), 条
+            assert 条["项"] and 条["甲"] and 条["乙"]
+
+    def test_胜率高的一方算占优(self):
+        要点 = {条["项"]: 条 for 条 in 对比要点("甲", self._甲(), "乙", self._乙())}
+        assert 要点["胜率"]["优"] == "甲"
+
+    def test_死亡少的一方算占优(self):
+        """场均死亡越小越好，方向和胜率相反。"""
+        要点 = {条["项"]: 条 for 条 in 对比要点("甲", self._甲(), "乙", self._乙())}
+        assert 要点["场均死亡"]["优"] == "乙"
+
+    def test_文本里写明谁占优(self):
+        文本 = 对比文本(对比要点("甲", self._甲(), "乙", self._乙()), "甲", "乙")
+        assert "甲占优" in 文本 or "乙占优" in 文本
+        assert "胜率" in 文本
+
+    def test_持平时标出来(self):
+        同 = self._甲()
+        文本 = 对比文本(对比要点("甲", 同, "乙", 同), "甲", "乙")
+        assert "持平" in 文本
+
+    def test_占优项数不对称(self):
+        要点 = 对比要点("甲", self._甲(), "乙", self._乙())
+        汇总 = 占优项数(要点, "甲", "乙")
+        assert "甲" in 汇总 and "乙" in 汇总
+        assert " 0 项" not in 汇总.split("、")[0], "这场明显该有一方占优多项"
+
+    def test_空统计时不崩(self):
+        空 = 统计战绩([])
+        assert 对比要点("甲", 空, "乙", 空) == []
+
+
+class Test抽对局结果:
+    """胜负按真实胜率抽，不交给模型。
+
+    模型没有随机性：让它定结果，连开十局就是十次「超神带飞」，而一个 45%
+    胜率的号不该这样。
+    """
+
+    class 固定随机:
+        def __init__(self, 值: float) -> None:
+            self.值 = 值
+
+        def random(self) -> float:
+            return self.值
+
+    def test_高胜率多数赢(self):
+        统计 = {"总场次": 40, "胜率": 80.0}
+        assert 抽对局结果(统计, self.固定随机(0.5)) == "胜利"
+        assert 抽对局结果(统计, self.固定随机(0.9)) == "失败"
+
+    def test_低胜率多数输(self):
+        统计 = {"总场次": 40, "胜率": 30.0}
+        assert 抽对局结果(统计, self.固定随机(0.5)) == "失败"
+        assert 抽对局结果(统计, self.固定随机(0.2)) == "胜利"
+
+    def test_没有场次时按五成(self):
+        空 = {"总场次": 0, "胜率": 0.0}
+        assert 抽对局结果(空, self.固定随机(0.4)) == "胜利"
+        assert 抽对局结果(空, self.固定随机(0.6)) == "失败"
+
+    def test_满胜率也不是必赢(self):
+        """概率收到 0.9 上限——100% 胜率的号照样会输，不然没意思。"""
+        assert 抽对局结果({"总场次": 10, "胜率": 100.0}, self.固定随机(0.95)) == "失败"
+
+    def test_零胜率也不是必输(self):
+        assert 抽对局结果({"总场次": 10, "胜率": 0.0}, self.固定随机(0.05)) == "胜利"
+
+    def test_只返回两个值(self):
+        统计 = {"总场次": 5, "胜率": 50.0}
+        for 值 in (0.0, 0.3, 0.7, 0.99):
+            assert 抽对局结果(统计, self.固定随机(值)) in ("胜利", "失败")

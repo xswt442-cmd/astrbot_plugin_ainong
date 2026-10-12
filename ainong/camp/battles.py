@@ -12,7 +12,7 @@ from typing import Any
 
 from ..stats import 拉英雄表, 映射英雄名, 汇总文本, 统计战绩
 
-__all__ = ["读战绩", "读战绩摘要"]
+__all__ = ["读战绩", "读战绩摘要", "读战绩数据"]
 
 营地主站 = "https://kohcamp.qq.com"
 
@@ -87,8 +87,12 @@ async def 读战绩(传输, 角色ID: str = "", 页数: int = 1) -> list[dict[st
     return 全部
 
 
-async def 读战绩摘要(传输, 角色ID: str = "") -> str:
-    """取近期战绩并折成模型可读的文本。"""
+async def 读战绩数据(传输, 角色ID: str = "") -> tuple[str, dict[str, Any]]:
+    """取近期战绩，返回 (给模型读的文本, 统计原始字典)。
+
+    统计字典单独给出来是给 PK 用的：两个人的逐项对比**必须由代码算**，不能把
+    两份文本丢给模型让它自己比——那样它会给「各有千秋」。
+    """
     场次 = await 读战绩(传输, 角色ID, 页数=2)
     场次 = 映射英雄名(场次, await 拉英雄表())
     统计 = 统计战绩(场次)
@@ -99,4 +103,9 @@ async def 读战绩摘要(传输, 角色ID: str = "") -> str:
             段位 = str(场["roleJobName"])
             break
 
-    return 汇总文本(统计, 段位=段位)
+    return 汇总文本(统计, 段位=段位), 统计
+
+
+async def 读战绩摘要(传输, 角色ID: str = "") -> str:
+    """取近期战绩并折成模型可读的文本。"""
+    return (await 读战绩数据(传输, 角色ID))[0]

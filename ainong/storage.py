@@ -43,12 +43,48 @@ class 凭据仓库:
             return None
         return 载荷
 
-    def 写入(self, 用户: str, 账号: dict[str, str]) -> None:
+    def 写入(self, 用户: str, 账号: dict[str, Any]) -> None:
         self.目录.mkdir(parents=True, exist_ok=True)
         路径 = self.路径(用户)
-        路径.write_text(json.dumps(账号, ensure_ascii=False), encoding="utf-8")
+        # 顺手把用户标识与昵称一起存下来。文件名是标识的哈希，反推不回去，
+        # 而 PK 要按昵称找人、再拿标识去查战绩，两样都得在文件里。
+        载荷 = {**账号, "用户": 用户}
+        路径.write_text(json.dumps(载荷, ensure_ascii=False), encoding="utf-8")
         if os.name == "posix":
             路径.chmod(0o600)
+
+    def 全部(self) -> list[dict[str, Any]]:
+        """所有已绑定的记录。损坏或字段不全的文件直接跳过。"""
+        try:
+            文件们 = sorted(self.目录.glob(f"*{_文件名后缀}"))
+        except OSError:
+            return []
+
+        结果 = []
+        for 路径 in 文件们:
+            try:
+                载荷 = json.loads(路径.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(载荷, dict) and all(载荷.get(字段) for 字段 in _凭据字段):
+                结果.append(载荷)
+        return 结果
+
+    def 按昵称找(self, 昵称: str) -> list[dict[str, Any]]:
+        """按平台显示名找人。完全命中优先，其次是不区分大小写的子串。
+
+        走这条路是因为 QQ 官方平台拿不到被 @ 的人的标识：适配器只把「@机器人」
+        转成组件，@别人在事件里连痕迹都没有（实测组件与正文都为空）。所以群里
+        PK 只能靠名字点人。
+        """
+        目标 = (昵称 or "").strip().lower()
+        if not 目标:
+            return []
+        记录们 = self.全部()
+        精确 = [记录 for 记录 in 记录们 if str(记录.get("昵称", "")).strip().lower() == 目标]
+        if 精确:
+            return 精确
+        return [记录 for 记录 in 记录们 if 目标 in str(记录.get("昵称", "")).strip().lower()]
 
     def 删除(self, 用户: str) -> dict[str, Any] | None:
         记录 = self.读取(用户)

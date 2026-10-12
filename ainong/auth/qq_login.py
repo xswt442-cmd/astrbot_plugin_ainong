@@ -161,31 +161,40 @@ class QQ扫码会话:
                 )
 
     async def _换码直到扫码(self, 换码通知: Callable[[str], Any]) -> str:
-        """反复换新码直到扫到。"""
+        """等扫码，二维码到期才换新的一张。
+
+        这里踩过一个坑：原来循环体一进来就无条件 `换页重开` + `取二维码` +
+        `换码通知`，于是用户一次绑定会连着收到**两张**码——`出码()` 刚给过一张，
+        后台任务立刻又推一张。更糟的是那次换页会让 `出码()` 那张当场作废，
+        用户扫第一张必然失败。
+
+        所以要等第一张用满自己的寿命再去换：到期时间从进入本函数时起算，
+        而不是从循环开始处。每换一次把到期时间往后推一个刷新间隔。
+        """
         assert self._浏览器 is not None, "还没出码"
         截止 = time.monotonic() + self._超时
+        下次换 = time.monotonic() + self._刷新秒
         while time.monotonic() < 截止:
             if self._浏览器.已获授权码:
                 return self._浏览器.已获授权码
 
-            try:
-                await self._浏览器.换页重开(QQ_LOGIN_URL)
-                图片 = await self._浏览器.取二维码()
-            except Exception:
-                # 单次取图失败不值得放弃整轮，等一下再换。
-                await asyncio.sleep(self._刷新秒)
-                continue
+            if time.monotonic() >= 下次换:
+                try:
+                    await self._浏览器.换页重开(QQ_LOGIN_URL)
+                    图片 = await self._浏览器.取二维码()
+                except Exception:
+                    # 单次取图失败不值得放弃整轮，等下一个周期再试。
+                    await asyncio.sleep(轮询间隔秒)
+                    下次换 = time.monotonic() + self._刷新秒
+                    continue
 
-            if self._浏览器.已获授权码:
-                return self._浏览器.已获授权码
-
-            await 换码通知(图片)
-
-            片段结束 = min(time.monotonic() + self._刷新秒, 截止)
-            while time.monotonic() < 片段结束:
                 if self._浏览器.已获授权码:
                     return self._浏览器.已获授权码
-                await asyncio.sleep(轮询间隔秒)
+
+                await 换码通知(图片)
+                下次换 = time.monotonic() + self._刷新秒
+
+            await asyncio.sleep(轮询间隔秒)
 
         raise TimeoutError(f"{self._超时} 秒内没有等到扫码完成")
 
