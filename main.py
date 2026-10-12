@@ -21,8 +21,11 @@ from astrbot.core.star.filter.command import GreedyStr
 # 阶段报错，而不是等用户发了指令才在懒加载里抛模块不存在。
 from .ainong.auth.qq_login import QQ扫码会话, 换取平台凭据
 from .ainong.auth.scan_session import 扫码会话
-from .ainong.camp.battles import 读战绩摘要
+from .ainong.camp.battles import 读战绩数据
 from .ainong.camp.transport import 营地传输
+from .ainong.pk import 找对手
+from .ainong.prompts import PK提示, 开一局提示, 锐评提示
+from .ainong.stats import 占优项数, 对比文本, 对比要点, 抽对局结果
 from .ainong.storage import 凭据仓库
 
 _帮助文本 = """爱农 · 王者营地战绩
@@ -39,10 +42,25 @@ _帮助文本 = """爱农 · 王者营地战绩
   带角色ID：切换到该角色，之后的查询都看它。
 
 /爱农 战绩
-  当前角色的近期战绩摘要：胜率、KDA、模式分布、英雄池、MVP 与连败。
+  当前角色的近期战绩：段位与星数、巅峰分、胜率、KDA、MVP 占比、SVP、
+  奖牌、一血与超神、局内评价、模式分布、英雄池、最近 10 场走势与连胜连败。
 
 /爱农 锐评
-  让模型基于上面的数据写一段评价，指出打得好的地方和明显的问题。
+  让模型基于上面的数据写一段锐评。会先给一句称号，再分别说打得好、
+  问题和一条具体建议。
+
+/爱农 PK <名字>
+  和另一个人比近期战绩。写对方的 PK 名字，例如 /爱农 PK 老王。
+  也可以直接给对方的用户标识。双方都得先绑定营地账号。
+  模型会给两人各打一个趣味分并点评胜负手。
+
+/爱农 昵称 <名字>
+  给自己起一个 PK 用的名字，群友才能用 /爱农 PK <名字> 点你。
+  不带参数则看当前的名字。
+
+/爱农 开一局
+  假设他又开了一局排位，让模型推演这一局的过程与结果。
+  胜负按他自己的胜率抽，不是每次都能赢。
 
 /爱农 解绑
   解除绑定并立即删除本地凭据。扫码卡住时也可以用它清掉当前会话。
@@ -54,6 +72,18 @@ _帮助文本 = """爱农 · 王者营地战绩
   就是这条。
 
 直接问模型「我的王者战绩怎么样」也会走同一套数据。"""
+
+_PK用法 = """要跟谁 PK？写对方的 PK 名字就行，例如：
+/爱农 PK 老王
+
+不知道对方的名字？让对方发一次 /爱农 昵称 <名字> 给自己起一个，
+或者把他的用户标识发过来（发 /爱农 状态 能看到自己的）。
+
+对方必须先绑定过营地账号。@ 对方这条路在 QQ 官方平台走不通——平台
+不把被 @ 的人的标识交给机器人，事件里连痕迹都没有。"""
+
+# PK 名字的长度上限。只是个称呼，太长在比分那行会挤爆。
+_昵称上限 = 16
 
 
 class Main(Star):
@@ -165,19 +195,19 @@ class Main(Star):
                 "扫完我会自动回你结果；如果一直没反应，发 /爱农 状态 查一下。"
             )
 
-        # 回调只收授权码，用户标识在这里绑掉。原来直接把 _收到授权码 传进去，
-        # 而它要 (用户, 授权码) 两个参数，等授权码只传一个，调用即 TypeError；
-        # 后台 task 崩了没人收，用户看到"扫码已登上"却没绑定成功，日志里只有
-        # 一行 Traceback。绑成零参在这里，出错也由下面的兜底通知用户。
+        # `_完成` 是本函数的局部函数，不是方法——写 `self._完成` 会 AttributeError
+        # （v0.1.8 线上原话）。它炸在扫码成功之后，用户看到的是「扫完了却报错」。
         async def _完成(平台凭据: dict[str, str] | str) -> None:
             await self._收到授权码(用户, 平台凭据)
 
         if 平台 == "QQ":
-            会话.开始等待(
-                lambda code: self._完成(换取平台凭据(code)),
-                self._换码通知(用户),
-                self._扫码失败(用户, 平台),
-            )
+
+            async def _完成QQ(code: str) -> None:
+                # 换票必须 await：`换取平台凭据` 是协程函数，不 await 就把一个
+                # 从未被 await 的协程对象当凭据传下去。
+                await _完成(await 换取平台凭据(code))
+
+            会话.开始等待(_完成QQ, self._换码通知(用户), self._扫码失败(用户, 平台))
         else:
             会话.开始等待(_完成, self._扫码失败(用户, 平台))
 
@@ -189,6 +219,16 @@ class Main(Star):
     def _侧车地址(self) -> str:
         """浏览器侧车的地址。QQ 扫码要靠它，微信那条不需要。"""
         return str(self.config.get("playwright_url", "") or "http://playwright:3000")
+
+    def _昵称(self, 用户: str) -> str:
+        """发起绑定那个人的平台显示名。取不到就空着，不猜。"""
+        事件 = self._事件.get(用户)
+        if 事件 is None:
+            return ""
+        try:
+            return str(事件.get_sender_name() or "")
+        except Exception:
+            return ""
 
     def _换码通知(self, 用户: str) -> Callable[[str], Any]:
         """二维码换了就再推一张。QQ 的码两分钟就过期，用户手上那张会废掉。"""
@@ -236,9 +276,19 @@ class Main(Star):
             finally:
                 await 传输.关闭()
 
-            self._凭据.写入(用户, 账号)
+            # 顺手记下平台显示名。PK 时要念出双方的名字，而对手的显示名只能
+            # 在对方绑定时留下——事件在 PK 那一刻是拿不到的。
+            昵称 = self._昵称(用户)
+            self._凭据.写入(用户, {**账号, "昵称": 昵称})
             logger.info(f"[ainong] 用户绑定营地账号 {账号['营地ID']}")
-            await self._通知(用户, f"绑定成功，营地账号 {账号['营地ID']}。发 /爱农 战绩 试试。")
+            # 顺便把 PK 名字报出来：平台给的是 QQ 昵称而不是群昵称，不提示的话
+            # 没人知道该去改。
+            await self._通知(
+                用户,
+                f"绑定成功，营地账号 {账号['营地ID']}。发 /爱农 战绩 试试。\n"
+                f"PK 用的名字是「{昵称 or '（这次没取到）'}」，"
+                "想换就发 /爱农 昵称 <名字>。",
+            )
         except Exception as exc:
             logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
             await self._通知(用户, f"绑定失败：{exc}")
@@ -317,17 +367,47 @@ class Main(Star):
 
         行 = [f"你的标识：{用户 or '（拿不到）'}"]
         if 记录:
+            昵称 = str(记录.get("昵称") or "").strip()
             行.append(
-                f"已绑定营地账号 {记录['营地ID']}，"
-                f"当前角色 {记录.get('角色ID') or '（未选择，用 /爱农 角色 选）'}"
+                f"已绑定营地账号 {记录['营地ID']}"
+                + (f"（{昵称}）" if 昵称 else "")
+                + f"，当前角色 {记录.get('角色ID') or '（未选择，用 /爱农 角色 选）'}"
             )
         else:
-            行.append("未绑定营地账号")
+            行.append("未绑定营地账号，发 /爱农 绑定QQ 或 /爱农 绑定微信 开始。")
 
         if 用户 in self._扫码会话:
             行.append("有一个扫码会话在进行中。卡住的话发 /爱农 解绑 清掉它。")
 
         yield event.plain_result("\n".join(行))
+
+    @爱农.command("昵称")
+    async def 昵称(self, event: AstrMessageEvent, 名字: GreedyStr):
+        """设置 PK 用的名字。
+
+        绑定时会自动记下平台给的显示名，但那个值不可靠：QQ 官方接口回的是 QQ
+        昵称而不是群昵称，实测有人是「……」。所以留一个自己设的出口。
+        """
+        用户 = event.get_sender_id()
+        记录 = self._凭据.读取(用户)
+        if not 记录:
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            return
+
+        新名 = str(名字 or "").strip()
+        if not 新名:
+            yield event.plain_result(
+                f"你现在的 PK 名字是「{记录.get('昵称') or '（没设）'}」。"
+                "发 /爱农 昵称 <名字> 改一个。"
+            )
+            return
+        if len(新名) > _昵称上限:
+            yield event.plain_result(f"名字太长了，{_昵称上限} 个字以内。")
+            return
+
+        记录["昵称"] = 新名
+        self._凭据.写入(用户, 记录)
+        yield event.plain_result(f"好，以后群友发 /爱农 PK {新名} 就能点你。")
 
     # ---------------------------------------------------------------- 查询
 
@@ -397,7 +477,7 @@ class Main(Star):
     async def 锐评(self, event: AstrMessageEvent):
         """让模型基于近期战绩给一段评价。"""
         数据 = await self._读战绩(event.get_sender_id())
-        if 数据.startswith(("还没绑定", "提问者还没有", "读取战绩失败")):
+        if self._战绩不可用(数据):
             yield event.plain_result(数据)
             return
 
@@ -407,12 +487,148 @@ class Main(Star):
             yield event.plain_result(f"取不到当前对话用的模型：{exc}")
             return
 
-        提示 = (
-            "下面是这个玩家的王者荣耀近期战绩统计。"
-            "请基于这些数据写一段有话说的锐评：先说数据说明了什么，"
-            "再指出打得好的地方和明显的问题，最后给一条能改进的具体建议。"
-            "语气直接，不要客套，不要复述数据原文，控制在 200 字以内。\n\n"
-            f"{数据}"
+        try:
+            结果 = await self.context.tool_loop_agent(
+                event=event,
+                chat_provider_id=提供方,
+                prompt=锐评提示(数据),
+                max_steps=8,
+            )
+        except Exception as exc:
+            logger.warning(f"[ainong] 锐评失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"锐评失败：{exc}")
+            return
+
+        yield event.plain_result(结果.completion_text or "模型没有返回内容。")
+
+    @爱农.command("开一局", alias={"开一局排位"})
+    async def 开一局(self, event: AstrMessageEvent):
+        """按他近期的数据推演一局排位。
+
+        胜负由 `抽对局结果` 按真实胜率抽好再交给模型——让模型自己定的话，
+        它每次都会写「超神带飞」，一个 45% 胜率的号不该这样。
+        """
+        用户 = event.get_sender_id()
+        记录 = self._凭据.读取(用户)
+        if 记录 is None:
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            return
+
+        数据, 统计 = await self._读战绩与统计(记录, 标签=用户)
+        if self._战绩不可用(数据):
+            yield event.plain_result(数据)
+            return
+        if not 统计.get("总场次"):
+            yield event.plain_result("还没有可查的近期战绩，开不了局。")
+            return
+
+        try:
+            提供方 = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+        except Exception as exc:
+            yield event.plain_result(f"取不到当前对话用的模型：{exc}")
+            return
+
+        try:
+            结果 = await self.context.tool_loop_agent(
+                event=event,
+                chat_provider_id=提供方,
+                prompt=开一局提示(数据, 抽对局结果(统计)),
+                max_steps=8,
+            )
+        except Exception as exc:
+            logger.warning(f"[ainong] 开一局失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"开一局失败：{exc}")
+            return
+
+        yield event.plain_result(结果.completion_text or "模型没有返回内容。")
+
+    @爱农.command("PK", alias={"pk", "对战"})
+    async def PK(self, event: AstrMessageEvent, 目标: GreedyStr):
+        """和另一个人比近期战绩。
+
+        对手的定位顺序：先看消息里的 @ 或标识，再按群昵称找人。**QQ 官方平台
+        拿不到被 @ 的人的标识**——适配器只把「@机器人」转成组件，@别人在事件里
+        连痕迹都没有（实测组件是 `['qq_official', None]`、正文是 `'爱农 PK'`），
+        所以昵称才是这个平台上的主路径。
+
+        查对手战绩走「记录」而不是「用户标识」：凭据里本来就够用，老的绑定
+        记录也没存过标识。
+        """
+        自己 = event.get_sender_id()
+        自己记录 = self._凭据.读取(自己)
+        if 自己记录 is None:
+            yield event.plain_result("你还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            return
+
+        参数 = str(目标 or "").strip()
+        对手 = 找对手(
+            event.get_messages(),
+            f"{参数} {getattr(event, 'message_str', '') or ''}",
+            自己=自己,
+            机器人=self._机器人标识(event),
+        )
+        对手记录 = self._凭据.读取(对手) if 对手 else None
+
+        # 捡到的标识没绑定过，多半用户其实写的是昵称。按名字再找一遍。
+        if 对手记录 is None and 参数:
+            匹配 = self._凭据.按昵称找(参数)
+            if len(匹配) > 1:
+                名字 = "、".join(str(记录.get("昵称") or "?") for 记录 in 匹配)
+                yield event.plain_result(f"有不止一个叫「{参数}」的：{名字}。写完整一点再试。")
+                return
+            if 匹配:
+                对手记录 = 匹配[0]
+                对手 = str(匹配[0].get("用户") or "") or 对手
+
+        自己记录 = self._凭据.读取(自己)
+        if 对手记录 is not None and self._同一个账号(自己记录, 对手记录):
+            yield event.plain_result("这跟你的绑定是同一个营地账号，比不出高下。找个群友。")
+            return
+
+        if 对手记录 is None:
+            # 各平台 @ 人的形态差别极大，QQ 官方平台干脆什么都不给，所以把实际
+            # 拿到的东西记下来——否则只能靠猜。
+            logger.info(
+                "[ainong] PK 找不到对手：参数=%r 组件=%r 正文=%r 自己=%r",
+                参数,
+                [getattr(组件, "qq", None) for 组件 in event.get_messages() or []],
+                str(getattr(event, "message_str", "") or ""),
+                自己,
+            )
+            yield event.plain_result(_PK用法)
+            return
+
+        自己数据, 自己统计 = await self._读战绩与统计(自己记录, 标签=自己)
+        if self._战绩不可用(自己数据):
+            yield event.plain_result(自己数据)
+            return
+        对手数据, 对手统计 = await self._读战绩与统计(对手记录)
+        if self._战绩不可用(对手数据):
+            yield event.plain_result("读不到对方的数据，可能他没选角色或关了战绩展示。")
+            return
+        if not 自己统计.get("总场次") or not 对手统计.get("总场次"):
+            yield event.plain_result("有一方没有可查的近期战绩，比不了。")
+            return
+
+        try:
+            提供方 = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+        except Exception as exc:
+            yield event.plain_result(f"取不到当前对话用的模型：{exc}")
+            return
+
+        自己名 = self._显示名(event.get_sender_name(), "你")
+        对手名 = self._显示名(str(对手记录.get("昵称") or ""), "对手")
+
+        # 逐项对比在这里**算死**再交给模型解说。让模型自己比，它最省事的答案
+        # 就是「各有千秋」——线上实测真出过 83 对 87 这种看不出输赢的分。
+        要点 = 对比要点(自己名, 自己统计, 对手名, 对手统计)
+        提示 = PK提示(
+            自己名,
+            对手名,
+            对比文本(要点, 自己名, 对手名),
+            占优项数(要点, 自己名, 对手名),
+            自己数据,
+            对手数据,
         )
 
         try:
@@ -423,21 +639,59 @@ class Main(Star):
                 max_steps=8,
             )
         except Exception as exc:
-            logger.warning(f"[ainong] 锐评失败：{type(exc).__name__}: {exc}")
-            yield event.plain_result(f"锐评失败：{exc}")
+            logger.warning(f"[ainong] PK 失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"PK 失败：{exc}\n\n两人的数据：\n\n{自己数据}\n\n{对手数据}")
             return
 
         yield event.plain_result(结果.completion_text or "模型没有返回内容。")
+
+    @staticmethod
+    def _战绩不可用(文本: str) -> bool:
+        """`_读战绩` 失败时返回的是给人看的整句话，不是数据。"""
+        return 文本.startswith(("提问者还没有", "读取战绩失败"))
+
+    @staticmethod
+    def _显示名(候选: str, 兜底: str) -> str:
+        return 候选.strip() or 兜底
+
+    @staticmethod
+    def _机器人标识(event: AstrMessageEvent) -> str:
+        """机器人自己的标识。群里 @机器人 会产生 At 组件，得把它排掉。"""
+        try:
+            return str(event.get_self_id() or "")
+        except Exception:
+            return ""
 
     async def _读战绩(self, 用户: str) -> str:
         记录 = self._凭据.读取(用户)
         if not 记录:
             return "提问者还没有绑定王者营地账号，无法查询战绩。"
+        return await self._读战绩用记录(记录, 标签=用户)
 
+    async def _读战绩用记录(self, 记录: dict[str, Any], *, 标签: str = "") -> str:
+        """只要文本。战绩、锐评用。"""
+        return (await self._读战绩与统计(记录, 标签=标签))[0]
+
+    async def _读战绩与统计(
+        self, 记录: dict[str, Any], *, 标签: str = ""
+    ) -> tuple[str, dict[str, Any]]:
+        """返回 (给模型读的文本, 统计字典)。
+
+        PK 要的是**统计字典**：两个人的逐项对比得由代码算（`stats.对比要点`），
+        不能把两份文本丢给模型让它自己比——那样它会端水。
+        """
         async with 营地传输() as 传输:
             传输.绑定账号(**{k: 记录[k] for k in ("营地ID", "令牌", "对称密钥")})
             try:
-                return await 读战绩摘要(传输, 记录.get("角色ID") or "")
+                return await 读战绩数据(传输, 记录.get("角色ID") or "")
             except Exception as exc:
-                logger.warning(f"[ainong] 读战绩失败：{type(exc).__name__}: {exc}")
-                return f"读取战绩失败：{exc}"
+                谁 = 标签 or 记录.get("营地ID")
+                logger.warning(f"[ainong] 读战绩失败（{谁}）：{type(exc).__name__}: {exc}")
+                return f"读取战绩失败：{exc}", {}
+
+    @staticmethod
+    def _同一个账号(甲: dict[str, Any] | None, 乙: dict[str, Any] | None) -> bool:
+        """两份绑定指向同一个营地账号。自己没绑定时不算。"""
+        if not 甲 or not 乙:
+            return False
+        return str(甲.get("营地ID")) == str(乙.get("营地ID"))
