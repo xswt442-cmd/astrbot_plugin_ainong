@@ -9,6 +9,30 @@
 
 尚未发布的改动写在这里。
 
+## [0.1.8] - 2026-10-12
+
+### 新增
+
+- `/爱农 绑定QQ`，走手机 QQ 扫码。`/爱农 绑定` 保留为 `/爱农 绑定微信` 的别名，
+  老用法不受影响。QQ 的码只有两分钟左右有效期，插件会在过期前自动换一张发给
+  用户，以最后收到的那张为准
+- `ainong/auth/qq_login.py` 承载 QQ 扫码流程。从 `ainong/verify/qq_login.py`
+  抽出来的——原先那套只在验证脚本里，主流程用不了
+- 配置项 `playwright_url`，浏览器侧车地址，默认 `http://playwright:3000`
+- `test/test_qq_scan.py` 覆盖换码通知、失败清理、取消语义、浏览器不泄漏
+
+### 修复
+
+- 没装 playwright 的环境不再加载失败。原先 `ainong/verify/browser.py` 在模块
+  顶层 import playwright，而它被 QQ 绑定流程依赖，一加载插件就崩——微信那条
+  也一起用不了了。现在 import 延迟到真正要开浏览器时，缺依赖时报的是
+  「QQ 扫码需要 playwright」而不是 ModuleNotFoundError
+
+### 变更
+
+- `browser.py` 与 `selectors.py` 从 `verify/` 挪到 `auth/`。它们是 QQ 绑定的
+  运行时依赖，不是验证脚本专用
+
 ## [0.1.7] - 2026-10-12
 
 ### 修复
