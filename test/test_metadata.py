@@ -76,3 +76,43 @@ def test_简介长度适合界面():
     """short_desc 显示在紧凑位置，塞太长会溢出或被截。"""
     短 = _元数据().get("short_desc", "")
     assert len(短) <= 40, f"short_desc {len(短)} 字，太长了，建议控制在 40 字内"
+
+
+# 取自 AstrBot 的 ADAPTER_NAME_2_TYPE（astrbot/core/star/filter/
+# platform_adapter_type.py）。平台名拼错不会报错，只是标记不生效。
+合法平台 = {
+    "aiocqhttp",
+    "qq_official",
+    "qq_official_webhook",
+    "telegram",
+    "wecom",
+    "wecom_ai_bot",
+    "lark",
+    "dingtalk",
+    "discord",
+    "slack",
+    "kook",
+    "vocechat",
+    "weixin_official_account",
+    "satori",
+    "misskey",
+    "line",
+    "matrix",
+    "weixin_oc",
+    "mattermost",
+    "webchat",
+}
+
+
+def test_平台名合法():
+    """拼错只是标记不生效，不会在任何地方报错，所以在这里拦。"""
+    平台 = _元数据().get("support_platforms")
+    assert 平台, "metadata.yaml 缺 support_platforms"
+    assert isinstance(平台, list), f"support_platforms 要是列表，现在是 {type(平台).__name__}"
+    非法 = [p for p in 平台 if p not in 合法平台]
+    assert not 非法, f"这些平台名不在 AstrBot 的枚举里：{非法}。可选：{sorted(合法平台)}"
+
+
+def test_声明了_qq_官方():
+    """主要在 QQ 官方 bot 上用，漏了它市场页面上的平台标记就是错的。"""
+    assert "qq_official" in (_元数据().get("support_platforms") or [])
