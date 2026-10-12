@@ -86,9 +86,11 @@ class TestPK提示:
     def test_要求逐项带数字(self):
         assert "逐项：" in self.提示
 
-    def test_要求点名双方的短板(self):
-        assert "双方最难看的那一项" in self.提示
-        assert "对于输的一方点名更狠一点" in self.提示
+    def test_主要攻击输的一方(self):
+        assert "主要攻击输的一方" in self.提示
+        assert "赢的一方顺带攻击一下" in self.提示
+        assert "不要两边都重点攻击" in self.提示
+        assert "双方最难看" not in self.提示, "别让模型两边都重点攻击"
 
     def test_禁掉了端水词(self):
         for 词 in 端水词:
