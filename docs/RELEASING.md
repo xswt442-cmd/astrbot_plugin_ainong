@@ -11,9 +11,10 @@ v0.1.3 就只推了标签，Releases 页面停在 v0.1.1。
 ## 一次发版会影响什么
 
 - **GitHub Release** —— 手动触发 `release` 工作流，不自动。
-- **AstrBot 插件市场** —— **不由标签驱动**。要在
-  <https://cloud.astrbot.app/publish> 发布，注册 AstrBot Cloud 账号后填本仓库
-  地址，平台自己解析 `metadata.yaml`。
+- **AstrBot 插件市场** —— **不跟 GitHub Release 走，要手工提交**。要在
+  <https://cloud.astrbot.app/publish> 填本仓库地址，注册 AstrBot Cloud 账号后
+  由平台自己抓 `main`、解析 `metadata.yaml`、打包并写进索引。
+  **每个版本都要重做一次**，否则用户看到的和装到的都是上一个版本。
 
   老的 [`AstrBot_Plugins_Collection`](https://github.com/AstrBotDevs/AstrBot_Plugins_Collection)
   仓库已标注 `DEPRECATED`，README 明确写着「请直接提交到新平台」，不要再去那里提 PR。
@@ -84,8 +85,25 @@ v0.1.3 就只推了标签，Releases 页面停在 v0.1.1。
 
    工作流跑完后，**市场发布还没做**，继续第 7 步。
 
-7. 要进 AstrBot 插件市场，开 <https://cloud.astrbot.app/publish>，填本仓库地址
-   提交。平台自己解析 `metadata.yaml`，所以这些字段要写对：
+7. 去 AstrBot 插件市场提交 —— **每个版本都要做一次**
+
+   开 <https://cloud.astrbot.app/publish>，填本仓库地址提交：
+   `https://github.com/xswt442-cmd/astrbot_plugin_ainong`
+
+   **市场不跟 GitHub Release 走，没有自动同步。** 平台靠这次提交去抓 `main`、
+   打包、生成索引里的一条记录。没做这一步，用户的 WebUI 里就一直看到上一个
+   版本，装到的也是旧代码——GitHub 上 tag 和 Release 明明都是新的。
+
+   验证有没有生效，看服务器上那份索引（AstrBot 每次进市场页都会重新拉）：
+
+   ```sh
+   python3 -c "import json; print(json.load(open('/opt/qq-ai/astrbot-data/plugins.json'))
+   ['data']['xswt442-cmd/astrbot_plugin_ainong']['version'])"
+   ```
+
+   版本号对上刚发的那个才算成。
+
+   平台自己解析 `metadata.yaml`，所以这些字段要写对：
 
    | 字段 | 值 |
    |---|---|
