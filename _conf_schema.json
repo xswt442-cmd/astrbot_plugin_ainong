@@ -3,6 +3,12 @@
     "description": "扫码等待时长（秒）",
     "type": "int",
     "default": 180,
-    "hint": "从二维码发出开始计时。二维码本身有效期约五分钟，超时后需要重新发 /绑定。"
+    "hint": "从二维码发出开始计时。微信的码约五分钟有效；QQ 的码只有两分钟左右，插件会在过期前自动换新并发给你。"
+  },
+  "playwright_url": {
+    "description": "浏览器侧车地址",
+    "type": "string",
+    "default": "http://playwright:3000",
+    "hint": "QQ 扫码登录要用它。AstrBot 容器里没有浏览器，Chromium 跑在另一个容器里，用 deploy/compose.playwright.yaml 起。只用微信绑定的话用不到。"
   }
 }

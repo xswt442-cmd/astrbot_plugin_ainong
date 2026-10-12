@@ -94,11 +94,9 @@ def test_清理会话清掉三样东西():
 
 def test_回调是单参协程():
     """等授权码 按单参调用回调，传双参进去就是 TypeError。"""
-    片段 = _方法源码("Main", "绑定")
-    assert "def _完成(授权码: str) -> None:" in 片段, (
-        "绑定 里的回调应是一个只收授权码的协程，把用户标识用闭包绑掉"
-    )
-    assert "self._收到授权码(用户, 授权码)" in 片段, "回调里要把用户标识传下去"
+    片段 = _方法源码("Main", "_绑定")
+    assert "def _完成(" in 片段, "绑定 里的回调应是只收一个参数的协程"
+    assert "self._收到授权码(用户," in 片段, "回调里要把用户标识传下去"
     # 不能直接把双参方法当回调传出去
     assert "开始等待(self._收到授权码" not in 片段, (
         "别把 _收到授权码 直接当回调传，等授权码 只传一个参数"
@@ -107,12 +105,60 @@ def test_回调是单参协程():
 
 def test_有状态指令():
     """扫码过程用户看不到结果，需要能自己查。"""
-    指令 = set()
+    指令 = _指令集()
+    assert {"绑定微信", "绑定QQ", "解绑", "战绩", "状态", "帮助"} <= 指令, (
+        f"指令不全：{sorted(指令)}"
+    )
+
+
+def _指令集() -> set[str]:
+    指令: set[str] = set()
     for 节点 in ast.walk(树):
         if isinstance(节点, ast.Call) and isinstance(节点.func, ast.Attribute):
             if 节点.func.attr == "command" and 节点.args:
                 第一个 = 节点.args[0]
                 if isinstance(第一个, ast.Constant) and isinstance(第一个.value, str):
                     指令.add(第一个.value)
-    assert "状态" in 指令, "缺 /爱农 状态，扫码完成后用户无从查进度"
-    assert {"绑定", "解绑", "战绩", "帮助"} <= 指令, f"指令不全：{sorted(指令)}"
+    return 指令
+
+
+def test_绑定有微信与_qq_两条():
+    """两条授权路径是分开的：微信纯 HTTP，QQ 要浏览器侧车。
+
+    别合成一个「绑定」再靠参数选——QQ 那条在侧车不可用时要给明确错误，
+    合成一条就只能说「绑定失败」。
+    """
+    指令 = _指令集()
+    assert "绑定微信" in 指令
+    assert "绑定QQ" in 指令
+    assert "绑定" not in 指令, "绑定应该拆成两条，别用一个入口混着选"
+
+
+def test_绑定_保留旧指令_作别名():
+    """老用户发 /爱农 绑定 不该突然失效——它是 绑定微信 的别名。"""
+    for 节点 in ast.walk(树):
+        if not isinstance(节点, ast.AsyncFunctionDef):
+            continue
+        if 节点.name not in ("绑定微信", "绑定QQ"):
+            continue
+        别名: set[str] = set()
+        for 装饰器 in 节点.decorator_list:
+            if isinstance(装饰器, ast.Call) and isinstance(装饰器.func, ast.Attribute):
+                if 装饰器.func.attr != "command":
+                    continue
+                for 关键字 in 装饰器.keywords:
+                    if 关键字.arg == "alias" and isinstance(关键字.value, ast.Set):
+                        别名 = {
+                            e.value
+                            for e in 关键字.value.elts
+                            if isinstance(e, ast.Constant) and isinstance(e.value, str)
+                        }
+        assert "绑定" in 别名 or "绑定qq" in 别名, (
+            f"{节点.name} 没有保留旧指令名作别名，会让老用户的 /爱农 绑定 失效"
+        )
+
+
+def test_侧车地址来自配置():
+    """QQ 要连侧车，地址不能硬编码——部署时容器名可能不同。"""
+    片段 = _方法源码("Main", "_侧车地址")
+    assert "self.config.get" in 片段, "侧车地址应从配置读，不要写死"

@@ -3,6 +3,10 @@
 AstrBot 容器不装浏览器，扫码登录交给独立的浏览器服务。这里用 Playwright
 自带的 WebSocket 协议连接它，浏览器生命周期由本进程控制，退出时全部释放。
 
+playwright 只在 `qq-verify` 依赖组里，装了这条才可用。所以 import 放在
+`浏览器会话.__aenter__` 里而不是模块顶层：没装 playwright 的环境下插件照常
+加载，微信那条路也不受影响，只有 QQ 扫码会明确报「没装 playwright」。
+
 两个实测得到的行为，不处理就会失败：
 
 1. QQ 把 `auth://tauth.qq.com/` 回调改写成 `http://auth//tauth.qq.com/?code=...`，
@@ -19,14 +23,19 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from playwright.async_api import async_playwright
-
-from .selectors import 找二维码图片元素
-
-__all__ = ["浏览器会话"]
+__all__ = ["浏览器会话", "playwright_可用"]
 
 _回调路由 = "http://auth//tauth.qq.com/**"
 _导航超时毫秒 = 45000
+
+
+def playwright_可用() -> bool:
+    """playwright 装了没。没装只有 QQ 扫码不可用，其余功能正常。"""
+    try:
+        import playwright.async_api  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 @dataclass
@@ -40,8 +49,23 @@ class 浏览器会话:
     _上下文: Any = None
     页面: Any = None
     _授权码: str | None = field(default=None, init=False)
+    _找二维码: Any = None
 
     async def __aenter__(self) -> 浏览器会话:
+        # 延迟到真正要用浏览器时才 import playwright。没装的环境下插件照常
+        # 加载，微信那条路也不受影响。
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError as exc:
+            raise RuntimeError(
+                "QQ 扫码登录需要 playwright，但没装。"
+                "装它：uv sync --group qq-verify，或在容器里 pip install playwright。"
+                "只用微信绑定的话用不到这个功能。"
+            ) from exc
+
+        from .selectors import 找二维码图片元素
+
+        self._找二维码 = 找二维码图片元素
         self._pw = await async_playwright().start()
         浏览器 = await self._pw.chromium.connect(self.服务地址)
         self._上下文 = await 浏览器.new_context(
@@ -121,10 +145,13 @@ class 浏览器会话:
         """
         import asyncio
 
+        if self._找二维码 is None:
+            raise RuntimeError("浏览器会话还没启动")
+
         最后异常: Exception | None = None
         for _ in range(3):
             try:
-                元素 = await 找二维码图片元素(self.页面)
+                元素 = await self._找二维码(self.页面)
                 if 元素 is None:
                     raise RuntimeError("授权页已打开，但二维码没有加载出来")
                 数据 = await 元素.screenshot(type="png", timeout=5000)

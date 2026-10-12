@@ -19,34 +19,16 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import sys
-import time
 
-import aiohttp
-
-from ..auth.ysdk import YSDK_URL, build_auth_headers
+from ..auth.browser import 浏览器会话
+from ..auth.qq_login import QQ_LOGIN_URL, QQ_USER_AGENT, 换取平台凭据
 from ..camp.transport import 营地传输
-from .browser import 浏览器会话
 from .qr_server import 启动, 开浏览器
 
-QQ_APP_ID = "1105200115"
-QQ_LOGIN_URL = (
-    "https://openmobile.qq.com/oauth2.0/m_authorize"
-    f"?client_id={QQ_APP_ID}&scope=all"
-    f"&redirect_uri=auth%3A%2F%2Ftauth.qq.com%2F&style=qr&response_type=code"
-)
-QQ_USER_AGENT = (
-    "Mozilla/5.0 (Linux; Android 15; V2366GA Build/V417IR; wv) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 "
-    "Chrome/110.0.5481.154 Safari/537.36 tencent_game_emulator"
-)
-
 扫码超时秒 = int(os.environ.get("SCAN_TIMEOUT", "600"))
-# 二维码扫后手机端还要经一次 txz.qq.com 跳转才回到授权页，这段往返吃掉
-# 了大部分有效期，实测远短于直观估计。刷新间隔必须比真实寿命短。
 二维码刷新秒 = int(os.environ.get("QR_REFRESH", "25"))
 轮询间隔秒 = 1
 
@@ -58,9 +40,12 @@ def 步骤(序号: int, 标题: str) -> None:
 async def 刷新二维码直到扫码(会话: 浏览器会话, 二维码路径: str) -> str:
     """反复重开授权页取新图，直到捕获授权码。
 
-    二维码从生成到失效只有约两分钟，而人工拿到图再扫要用掉大半。
-    所以不等它失效，主动换新。
+    二维码从生成到失效只有约两分钟，人工拿到图再扫要用掉大半，所以不等它失效，
+    主动换新。
     """
+    import asyncio
+    import time
+
     截止 = time.monotonic() + 扫码超时秒
     第几张 = 0
     while time.monotonic() < 截止:
@@ -75,8 +60,10 @@ async def 刷新二维码直到扫码(会话: 浏览器会话, 二维码路径: 
             continue
 
         剩余 = int(截止 - time.monotonic())
-        字节数 = len(图片)
-        print(f"  已保存 {二维码路径}（{字节数} 字节），剩余可扫时间 {剩余} 秒", flush=True)
+        print(
+            f"  已保存 {二维码路径}（{len(图片)} 字节），剩余可扫时间 {剩余} 秒",
+            flush=True,
+        )
 
         等待到 = min(二维码刷新秒, 剩余)
         片段结束 = time.monotonic() + 等待到
@@ -86,34 +73,6 @@ async def 刷新二维码直到扫码(会话: 浏览器会话, 二维码路径: 
             await asyncio.sleep(轮询间隔秒)
 
     raise TimeoutError(f"{扫码超时秒} 秒内没有等到扫码完成")
-
-
-async def 换取平台凭据(code: str) -> dict[str, str]:
-    步骤(4, "用授权码换取平台凭据")
-    timestamp = str(int(time.time()))
-    body = json.dumps({"appID": QQ_APP_ID, "loginCode": code}, separators=(",", ":"))
-    print(f"请求体字段：{sorted(json.loads(body))}（不打印凭据内容）", flush=True)
-
-    async with aiohttp.ClientSession() as 会话:
-        async with 会话.post(
-            YSDK_URL, headers=build_auth_headers(body, timestamp), data=body.encode("utf-8")
-        ) as 响应:
-            载荷 = json.loads(await 响应.text())
-
-    数据 = 载荷.get("data") or {}
-    print(f"外层 code={载荷.get('code')}，内层 ret={数据.get('ret')}", flush=True)
-
-    if 载荷.get("code") != 0 or 数据.get("ret") != 0:
-        raise RuntimeError(f"换票失败：{载荷.get('errmsg') or 数据.get('message') or '未知原因'}")
-
-    有效期 = 数据.get("expiresIn")
-    print(f"换取成功。accessToken 长度 {len(数据['accessToken'])}，有效期 {有效期} 秒", flush=True)
-    return {
-        "accessToken": 数据["accessToken"],
-        "openId": 数据["openID"],
-        "payToken": 数据.get("payToken", ""),
-        "refreshToken": 数据.get("refreshToken", ""),
-    }
 
 
 def 保存凭据(平台凭据: dict[str, str], 路径: str) -> None:
@@ -180,6 +139,8 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    import asyncio
+
     try:
         sys.exit(asyncio.run(main()))
     except TimeoutError:
