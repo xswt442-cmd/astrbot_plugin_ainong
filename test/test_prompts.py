@@ -99,9 +99,11 @@ class TestPK提示:
     def test_要求逐项带数字(self):
         assert "逐项：" in self.提示
 
-    def test_互损点名难看的那一项(self):
-        assert "必须点名双方最难看的那一项" in self.提示
-        assert "对于输的一方点名更狠一点" in self.提示
+    def test_互损主要攻击输的一方(self):
+        """两边都重点攻击等于没有倾向，反而像端水。"""
+        assert "主要攻击输的一方最难看的那一项" in self.提示
+        assert "赢的一方顺带攻击一下" in self.提示
+        assert "不要两边都重点攻击" in self.提示
 
     def test_不许编数据里没有的东西(self):
         assert "只说数据支撑得住的话" in self.提示
