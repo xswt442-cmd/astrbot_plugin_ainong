@@ -38,7 +38,7 @@ v0.1.3 就只推了标签，Releases 页面停在 v0.1.1。
    - `pyproject.toml` 的 `version`（**不带** `v`，如 `0.1.0`）
    - `docs/CHANGELOG.md` 的首个小节，标题写成 `## [X.Y.Z] - YYYY-MM-DD`
 
-   三处都要改。`test/test_version.py` 会检查它们一致，CI 每次推送都跑。
+   三处都要改。`test/test_version_parse.py` 会检查它们一致，CI 每次推送都跑。
 
 2. 跑本仓库的检查（命令见 `AGENTS.md` 的验证一节）：
 

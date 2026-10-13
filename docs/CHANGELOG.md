@@ -133,7 +133,7 @@
 
 ### 修复
 
-- 没装 playwright 的环境不再加载失败。原先 `ainong/verify/browser.py` 在模块
+- 没装 playwright 的环境不再加载失败。原先 `ainong/auth/browser.py` 在模块
   顶层 import playwright，而它被 QQ 绑定流程依赖，一加载插件就崩——微信那条
   也一起用不了了。现在 import 延迟到真正要开浏览器时，缺依赖时报的是
   「QQ 扫码需要 playwright」而不是 ModuleNotFoundError
