@@ -8,14 +8,17 @@
   import 不到。
 - 指令全在 `爱农` 指令组下（`/爱农 战绩`），不占用通用名字。改动指令时
   提示文本里的示例要一起改。
-- `requirements.txt` 由 `uv export --format requirements.txt --no-hashes --no-dev
-  --no-emit-project --frozen --output-file requirements.txt` 生成，不要手工编辑。
-  加了依赖要重新导出，否则装插件时缺包。
+- `requirements.txt` **手写**：AstrBot 装插件时把它喂给 pip，而 pip 装的同一环境里
+  就有 AstrBot 核心自己的依赖，核心给这些包加了版本护栏。`uv export` 会把包钉成
+  `==`，正好撞上护栏，安装整体失败。理由与检查项见 `docs/RELEASING.md`，
+  约束由 `test/test_requirements.py` 钉住。加依赖时 `pyproject.toml` 与它一起改。
 - 只有验证脚本需要的依赖放进 `[dependency-groups] qq-verify`。缺它插件仍能加载，
   只是提供不了 QQ 扫码。
 - 网络请求只用 `aiohttp`。
 - 持久化数据放 AstrBot 的 `data/plugin_data/ainong/`，不放插件目录。
 - 凭据不写日志、不进异常消息、不进提交。解绑时删文件，不保留。
+- `__init__` 的 `config` 必须是可省参数（`AstrBotConfig | None = None`）。AstrBot 只在
+  读到配置项时才把它传进来，声明成必需参数会让插件整个加载不起来。
 - 插件图标必须是根目录的 `logo.png`，文件名与位置都是 AstrBot 硬编码的
   （`star_manager.py` 里的 `logo_fname`）。WebUI 通过一个 300 秒有效的文件
   token 拉图，所以体积要小——超过几百 KB 每次刷新都会重传。改图标时改
@@ -24,14 +27,15 @@
 ## 结构
 
 ```
-main.py             插件入口，指令组与指令
+main.py             插件入口，指令组、指令与落空兜底
 ainong/crypto/       XXTEA、PKCS#1 块解析
 ainong/auth/         YSDK 签名、微信与 QQ 扫码、浏览器会话
 ainong/camp/         营地接口：传输层、频控、战绩
 ainong/stats.py      战绩统计、文本汇总、PK 的逐项对比
-ainong/prompts.py    锐评与 PK 的提示词（放这儿是为了能跑单测）
+ainong/prompts.py    锐评、PK 与开一局的提示词（放这儿是为了能跑单测）
 ainong/pk.py         PK 对手标识的解析
 ainong/storage.py    凭据与绑定关系
+ainong/兜底.py       指令落空的判据与提示
 ainong/verify/       可行性验证脚本，不参与运行
 test/                pytest 用例与真实响应快照
 deploy/              浏览器服务的 compose 片段、Dockerfile 与 seccomp 配置
@@ -51,6 +55,27 @@ docs/                更新日志与术语表
   里的局部函数，`self._完成` 直接 AttributeError；`换取平台凭据` 是协程函数，
   不 await 就把一个协程对象当凭据传下去。两者都在**扫码成功之后**才炸，
   用户看到的是「扫完了却绑不上」。
+- **漏 f 前缀的字符串与 except 里读 try 体内的变量**也由源码检查钉住：
+  两者语法都合法，只有运行时才炸。`test_main_wiring.py` 的 `Test源码卫生`。
+
+## 指令落空要自己接住
+
+`/爱农 <没匹配上子命令的内容>`，`CommandGroupFilter.filter` 的 `startswith`
+返回 False，指令被跳过，**消息原样进模型**——模型收到一句普通提问，于是自己编。
+爱完美实测过：用户发一个主页链接，模型回「打不开Steam，你发链接干嘛」。
+
+所以指令组挂了 `_落空兜底`（`CustomFilter`）：只在真落空时 `set_result` +
+`stop_event`。判据在 `ainong/兜底.是否落空`，**必须与
+`CommandGroupFilter.startswith` 一致（字面前缀匹配）**，否则会吃掉正常指令。
+
+`ainong/兜底.子命令名` 是手抄的别名清单，改 `main.py` 的指令或别名要跟着改——
+`test_main_wiring.py` 会核对。
+
+`.filter` 的返回值语义是「这条消息我管不管」，不是「命中没有」，**所有出口都必须
+`return True`**：写成「命中返回 False」会让整个指令组失效。
+
+组名另外挂了 `_组别名 = {f"/{_组名}"}`：QQ 官方的 At 唤醒分支不剥 `message_str`
+里的 `/`，没有这个别名时 `@机器人 /爱农 战绩` 整条指令静默失败。
 
 ## 战绩字段：先核实语义，取不到就不显示
 
@@ -77,6 +102,16 @@ docs/                更新日志与术语表
 「没这个字段」读成「这项就是 0」，凭空编出结论。
 
 新增统计维度时，测试里必须有一条是「缺字段时不出现在文本里」。
+
+## 有没有数据靠返回值判断，不靠文本长相
+
+`_读战绩` 与 `_读战绩与统计` 返回 `(文本, 统计字典)`，没有可用数据时统计字典是
+`None`，调用方靠这个 `None` 决定能不能继续。
+
+**不要改成靠文本前缀判断。** 这个角色没有可查的近期战绩时 `汇总文本` 返回的是
+一句「这个角色还没有可查的近期战绩。」，它既不以「还没绑定」也不以「读取战绩
+失败」开头。当成数据喂进锐评，提示里要求「全文至少出现 3 个具体数字」，
+模型只能编。
 
 ## PK：对手靠名字定位，对比由代码算
 

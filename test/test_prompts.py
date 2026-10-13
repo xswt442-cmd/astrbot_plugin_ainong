@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from ainong.prompts import PK提示, 开一局提示, 称号前缀, 端水词, 锐评提示
+from ainong.prompts import PK提示, 开一局提示, 推演声明, 称号前缀, 端水词, 锐评提示
 
 数据 = "段位 至尊星耀V 3星 ｜ 近40场 27胜13负 ｜ 胜率 67.5%"
 
@@ -46,6 +46,10 @@ class Test锐评提示:
         for 词 in 端水词:
             assert 词 in self.提示, f"端水词「{词}」应该写进禁令里"
 
+    def test_不许编数据里没有的东西(self):
+        assert "只说数据支撑得住的话" in self.提示
+        assert "宁可少说一句，也不要编一句" in self.提示
+
     def test_有字数区间(self):
         assert "180 到 260 字" in self.提示
 
@@ -69,10 +73,19 @@ class TestPK提示:
         assert "不要重算" in self.提示
         assert "不要推翻对比结论" in self.提示
 
-    def test_分数有量纲且敢于拉开(self):
+    def test_分数有量纲且分差要合理(self):
+        """分差要跟实际差距相符。
+
+        写「要敢于给大的分数差距」时，两个数据接近的人也会被硬拉开三十分，
+        看起来像在制造对立而不是在打分。
+        """
         assert "0-100 的整数" in self.提示, "分数要有量纲"
-        assert "根据实际情况给出分数差距" in self.提示
-        assert "敢于给大的分数差距" in self.提示
+        assert "分差要跟两人的实际差距相符" in self.提示
+        assert "敢于给大的分数差距" not in self.提示
+
+    def test_胜者要与分数一致(self):
+        """分数与胜者由模型各写各的，不钉住就会出现 88 分输给 70 分。"""
+        assert "胜者那一行写分数更高的那个人" in self.提示
 
     def test_不强制占优多的一方赢(self):
         """项数是机械数出来的，哪几项占优才决定强弱，判断留给模型。"""
@@ -86,11 +99,15 @@ class TestPK提示:
     def test_要求逐项带数字(self):
         assert "逐项：" in self.提示
 
-    def test_主要攻击输的一方(self):
-        assert "主要攻击输的一方" in self.提示
+    def test_互损主要攻击输的一方(self):
+        """两边都重点攻击等于没有倾向，反而像端水。"""
+        assert "主要攻击输的一方最难看的那一项" in self.提示
         assert "赢的一方顺带攻击一下" in self.提示
         assert "不要两边都重点攻击" in self.提示
-        assert "双方最难看" not in self.提示, "别让模型两边都重点攻击"
+
+    def test_不许编数据里没有的东西(self):
+        assert "只说数据支撑得住的话" in self.提示
+        assert "宁可少说一句，也不要编一句" in self.提示
 
     def test_禁掉了端水词(self):
         for 词 in 端水词:
@@ -114,8 +131,14 @@ class Test开一局提示:
         assert 数据 in self.提示
 
     def test_六个结构标签都在(self):
-        for 段 in ("【选人】", "【开局】", "【中期】", "【决胜】", "【结算】", "【赛后】"):
+        for 段 in ("选人：", "经过：", "亮点：", "问题：", "复盘：", "结算："):
             assert 段 in self.提示, f"缺结构 {段}"
+
+    def test_这是推演不是战绩(self):
+        """用户看到一串 K/D/A 看不出真假，第一行那句话是唯一的提示。"""
+        assert self.提示.count(推演声明) >= 2, "推演声明要在骨架与硬要求里各出现一次"
+        assert f"第一行必须是「{推演声明}」" in self.提示
+        assert "不要复述数据原文" in self.提示
 
     def test_结果写进去且不许改(self):
         assert "胜负已经定了：失败" in self.提示
@@ -127,10 +150,8 @@ class Test开一局提示:
     def test_选人限定在常用英雄里(self):
         assert "常用英雄" in self.提示
 
-    def test_禁掉推托词(self):
-        for 词 in ("假设", "大概", "可能"):
-            assert f"「{词}」" in self.提示, f"「{词}」应该写进禁令"
+    def test_不许编数据里没有的东西(self):
+        assert "只说数据支撑得住的话" in self.提示
 
     def test_有字数上限(self):
         assert "240 字" in self.提示
-        assert "每段不超过 40 字" in self.提示
