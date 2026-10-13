@@ -1,3 +1,1 @@
-# Claude Code
-
-Follow @AGENTS.md.
+Follow @AGENTS.md. For releases, also read @RELEASING.md.
