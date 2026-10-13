@@ -40,60 +40,29 @@ _组名 = "爱农"
 _组别名 = {f"/{_组名}"}
 
 _帮助文本 = """爱农 · 王者荣耀战绩查询
-
 数据来自王者营地，需要扫码登录一次。
 
-/爱农 绑定微信
-  微信扫码绑定你自己的营地账号。纯 HTTP，不需要浏览器。
+/爱农 绑定微信 ｜ 微信扫码绑定，不需要浏览器
+/爱农 绑定QQ ｜ QQ 扫码绑定，需要浏览器侧车
+/爱农 角色 ｜ 列出账号下的游戏角色
+/爱农 角色 <角色ID> ｜ 切换到该角色
+/爱农 战绩 ｜ 当前角色的近期战绩
+/爱农 锐评 ｜ 让模型基于战绩写一段锐评
+/爱农 PK <名字> ｜ 和另一个人比近期战绩
+/爱农 昵称 <名字> ｜ 改 PK 时被叫的名字
+/爱农 开一局 ｜ 推演下一局排位（不是真实战绩）
+/爱农 解绑 ｜ 解除绑定并删除凭据
+/爱农 状态 ｜ 看绑定情况与扫码进度
+/爱农 帮助 ｜ 就是这条
 
-/爱农 绑定QQ
-  手机 QQ 扫码绑定。码两分钟就过期，我会在过期前发新的，以最后一张为准。
-  需要浏览器侧车（在服务器上单独跑着 Chromium）。
-
-/爱农 角色 [角色ID]
-  不带参数：列出这个营地账号下的游戏角色，标出当前选中的。
-  带角色ID：切换到该角色，之后的查询都看它。
-
-/爱农 战绩
-  当前角色的近期战绩：段位与星数、巅峰分、胜率、KDA、MVP 占比、SVP、
-  奖牌、一血与超神、局内评价、模式分布、英雄池、最近 10 场走势与连胜连败。
-
-/爱农 锐评
-  让模型基于上面的数据写一段锐评。会先给一句称号，再分别说打得好、
-  问题和一条具体建议。
-
-/爱农 PK <名字>
-  和另一个人比近期战绩。写对方的 PK 名字，例如 /爱农 PK 老王。
-  也可以直接给对方的用户标识。双方都得先绑定营地账号。
-  模型会给两人各打一个趣味分并点评胜负手。
-
-/爱农 昵称 <名字>
-  给自己起一个 PK 用的名字，群友才能用 /爱农 PK <名字> 点你。
-  不带参数则看当前的名字。
-
-/爱农 开一局
-  假设他又开了一局排位，让模型推演这一局的过程与结果。
-  胜负按他自己的胜率抽，不是每次都能赢。
-
-/爱农 解绑
-  解除绑定并立即删除本地凭据。扫码卡住时也可以用它清掉当前会话。
-
-/爱农 状态
-  看自己的标识、绑定情况和有没有卡住的扫码会话。排查用。
-
-/爱农 帮助
-  就是这条。
-
+PK 要写对方的 PK 名字，双方都得先绑定营地账号；@ 别人在 QQ 官方平台
+拿不到标识，写了也认不出来。
 直接问模型「我的王者战绩怎么样」也会走同一套数据。"""
 
-_PK用法 = """要跟谁 PK？写对方的 PK 名字就行，例如：
-/爱农 PK 老王
+_PK用法 = """要跟谁 PK？写对方的 PK 名字，例如 /爱农 PK 老王。
 
-不知道对方的名字？让对方发一次 /爱农 昵称 <名字> 给自己起一个，
-或者把他的用户标识发过来（发 /爱农 状态 能看到自己的）。
-
-对方必须先绑定过营地账号。@ 对方这条路在 QQ 官方平台走不通——平台
-不把被 @ 的人的标识交给机器人，事件里连痕迹都没有。"""
+对方得先绑定营地账号，再发 /爱农 昵称 <名字> 设一个名字。
+@ 别人这条路在 QQ 官方平台走不通——平台不把被 @ 的人的标识交给机器人。"""
 
 # PK 名字的长度上限。只是个称呼，太长在比分那行会挤爆。
 _昵称上限 = 16
@@ -210,8 +179,7 @@ class Main(Star):
 
         if 用户 in self._扫码会话:
             yield event.plain_result(
-                f"{平台}扫码已经在进行中，看上一条消息里的二维码。"
-                "如果那张码已经失效，发 /爱农 解绑 清掉当前会话后重试。"
+                f"{平台}扫码已经在进行中，看上一条消息里的二维码；码失效了就发 /爱农 解绑 重来。"
             )
             return
 
@@ -232,8 +200,8 @@ class Main(Star):
 
             self._扫码会话[用户] = 会话
             提示 = (
-                "用手机 QQ 扫这个码。这张码很快会过期，我会在过期前发新的，"
-                "以最后一张为准。\n扫完我自动回你结果，没反应就发 /爱农 状态。"
+                "用手机 QQ 扫这个码，以最后一张为准。\n"
+                "扫完自动回你结果；一直没反应就发 /爱农 状态。"
             )
         else:
             会话 = 扫码会话(self._扫码超时())
@@ -246,10 +214,7 @@ class Main(Star):
                 return
 
             self._扫码会话[用户] = 会话
-            提示 = (
-                "用微信扫这个码，扫完等一会儿。\n"
-                "扫完我会自动回你结果；如果一直没反应，发 /爱农 状态 查一下。"
-            )
+            提示 = "用微信扫这个码，扫完等一会儿。\n扫完自动回你结果；一直没反应就发 /爱农 状态。"
 
         # `_完成` 是本函数的局部函数，不是方法——写 `self._完成` 会 AttributeError
         # （v0.1.8 线上原话）。它炸在扫码成功之后，用户看到的是「扫完了却报错」。
@@ -308,7 +273,7 @@ class Main(Star):
                 raise exc
             logger.warning(f"[ainong] 扫码等待失败：{type(exc).__name__}: {exc}")
             # 先通知再清理：_通知 依赖 _事件 与 _会话标识，清理会把它们丢掉。
-            await self._通知(用户, f"{平台}扫码没走完：{exc}\n发 /爱农 状态 可以随时查进度。")
+            await self._通知(用户, f"{平台}扫码没走完：{exc}\n发 /爱农 状态 看进度。")
             await self._清理会话(用户, 会话=self._扫码会话.pop(用户, None))
 
         return _处理
@@ -343,9 +308,9 @@ class Main(Star):
             # 没人知道该去改。
             await self._通知(
                 用户,
-                f"绑定成功，营地账号 {账号['营地ID']}。发 /爱农 战绩 试试。\n"
-                f"PK 用的名字是「{昵称 or '（这次没取到）'}」，"
-                "想换就发 /爱农 昵称 <名字>。",
+                f"绑定成功，营地账号 {账号['营地ID']}。\n"
+                f"PK 名字是「{昵称 or '（没取到）'}」，"
+                "要改发 /爱农 昵称 <名字>。",
             )
         except Exception as exc:
             logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
@@ -429,13 +394,13 @@ class Main(Star):
             行.append(
                 f"已绑定营地账号 {记录['营地ID']}"
                 + (f"（{昵称}）" if 昵称 else "")
-                + f"，当前角色 {记录.get('角色ID') or '（未选择，用 /爱农 角色 选）'}"
+                + f"，当前角色 {记录.get('角色ID') or '（未选，发 /爱农 角色 选）'}"
             )
         else:
-            行.append("未绑定营地账号，发 /爱农 绑定QQ 或 /爱农 绑定微信 开始。")
+            行.append("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
 
         if 用户 in self._扫码会话:
-            行.append("有一个扫码会话在进行中。卡住的话发 /爱农 解绑 清掉它。")
+            行.append("有一个扫码会话在进行中，卡住就发 /爱农 解绑 清掉。")
 
         yield event.plain_result("\n".join(行))
 
@@ -455,8 +420,7 @@ class Main(Star):
         新名 = str(名字 or "").strip()
         if not 新名:
             yield event.plain_result(
-                f"你现在的 PK 名字是「{记录.get('昵称') or '（没设）'}」。"
-                "发 /爱农 昵称 <名字> 改一个。"
+                f"当前 PK 名字：「{记录.get('昵称') or '（没设）'}」。发 /爱农 昵称 <名字> 改。"
             )
             return
         if len(新名) > _昵称上限:
@@ -465,7 +429,7 @@ class Main(Star):
 
         记录["昵称"] = 新名
         self._凭据.写入(用户, 记录)
-        yield event.plain_result(f"好，以后群友发 /爱农 PK {新名} 就能点你。")
+        yield event.plain_result(f"PK 名字改成「{新名}」，群友发 /爱农 PK {新名} 就能点你。")
 
     # ---------------------------------------------------------------- 查询
 
@@ -500,7 +464,7 @@ class Main(Star):
                 for 角色 in 列表
             ]
             yield event.plain_result(
-                "游戏角色：\n" + "\n".join(行) + "\n\n发 /爱农 角色 <角色ID> 切换。"
+                "游戏角色：\n" + "\n".join(行) + "\n发 /爱农 角色 <角色ID> 切换。"
             )
             return
 
@@ -511,14 +475,12 @@ class Main(Star):
             return
 
         self._凭据.选角色(用户, 匹配["角色ID"])
-        yield event.plain_result(
-            f"已切到{匹配['名称']}（{匹配['区服描述']}）。发 /爱农 战绩 看这个角色的数据。"
-        )
+        yield event.plain_result(f"已切到{匹配['名称']}（{匹配['区服描述']}）。")
 
     @爱农.command("战绩")
     async def 战绩(self, event: AstrMessageEvent):
         """当前角色的近期战绩摘要。"""
-        文本 = await self._读战绩(event.get_sender_id())
+        文本, _ = await self._读战绩(event.get_sender_id())
         yield event.plain_result(文本)
 
     @llm_tool(name="get_king_of_glory_profile")
@@ -529,13 +491,14 @@ class Main(Star):
             段位、常用英雄与位置、近期胜率与评分等统计结果。玩家关闭了
             战绩展示时返回说明文字。
         """
-        return await self._读战绩(event.get_sender_id())
+        文本, _ = await self._读战绩(event.get_sender_id())
+        return 文本
 
     @爱农.command("锐评")
     async def 锐评(self, event: AstrMessageEvent):
         """让模型基于近期战绩给一段评价。"""
-        数据 = await self._读战绩(event.get_sender_id())
-        if self._战绩不可用(数据):
+        数据, 统计 = await self._读战绩(event.get_sender_id())
+        if 统计 is None:
             yield event.plain_result(数据)
             return
 
@@ -573,11 +536,8 @@ class Main(Star):
             return
 
         数据, 统计 = await self._读战绩与统计(记录, 标签=用户)
-        if self._战绩不可用(数据):
+        if 统计 is None:
             yield event.plain_result(数据)
-            return
-        if not 统计.get("总场次"):
-            yield event.plain_result("还没有可查的近期战绩，开不了局。")
             return
 
         try:
@@ -615,7 +575,7 @@ class Main(Star):
         自己 = event.get_sender_id()
         自己记录 = self._凭据.读取(自己)
         if 自己记录 is None:
-            yield event.plain_result("你还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
             return
 
         参数 = str(目标 or "").strip()
@@ -631,8 +591,11 @@ class Main(Star):
         if 对手记录 is None and 参数:
             匹配 = self._凭据.按昵称找(参数)
             if len(匹配) > 1:
-                名字 = "、".join(str(记录.get("昵称") or "?") for 记录 in 匹配)
-                yield event.plain_result(f"有不止一个叫「{参数}」的：{名字}。写完整一点再试。")
+                候选 = "\n".join(f"· {记录.get('昵称') or '（没设名字）'}" for 记录 in 匹配)
+                yield event.plain_result(
+                    f"有 {len(匹配)} 个人叫「{参数}」，分不清是哪个：\n{候选}\n"
+                    "让对方发 /爱农 昵称 换个更特别的名字，或者把名字写完整一点。"
+                )
                 return
             if 匹配:
                 对手记录 = 匹配[0]
@@ -640,7 +603,7 @@ class Main(Star):
 
         自己记录 = self._凭据.读取(自己)
         if 对手记录 is not None and self._同一个账号(自己记录, 对手记录):
-            yield event.plain_result("这跟你的绑定是同一个营地账号，比不出高下。找个群友。")
+            yield event.plain_result("这跟你的绑定是同一个营地账号，比不了。")
             return
 
         if 对手记录 is None:
@@ -657,15 +620,12 @@ class Main(Star):
             return
 
         自己数据, 自己统计 = await self._读战绩与统计(自己记录, 标签=自己)
-        if self._战绩不可用(自己数据):
+        if 自己统计 is None:
             yield event.plain_result(自己数据)
             return
         对手数据, 对手统计 = await self._读战绩与统计(对手记录)
-        if self._战绩不可用(对手数据):
-            yield event.plain_result("读不到对方的数据，可能他没选角色或关了战绩展示。")
-            return
-        if not 自己统计.get("总场次") or not 对手统计.get("总场次"):
-            yield event.plain_result("有一方没有可查的近期战绩，比不了。")
+        if 对手统计 is None:
+            yield event.plain_result("读不到对方的近期战绩：他可能没选角色，或关了战绩展示。")
             return
 
         try:
@@ -674,7 +634,11 @@ class Main(Star):
             yield event.plain_result(f"取不到当前对话用的模型：{exc}")
             return
 
-        自己名 = self._显示名(event.get_sender_name(), "你")
+        # 念名字优先用各人自己设的 PK 名字——那是群里点人时用的称呼，而平台给的
+        # 显示名在 QQ 官方上是 QQ 昵称而不是群昵称，常常点不到人。
+        自己名 = self._显示名(
+            str(自己记录.get("昵称") or ""), self._显示名(event.get_sender_name(), "你")
+        )
         对手名 = self._显示名(str(对手记录.get("昵称") or ""), "对手")
 
         # 逐项对比在这里**算死**再交给模型解说。让模型自己比，它最省事的答案
@@ -706,11 +670,6 @@ class Main(Star):
         yield event.plain_result(结果.completion_text or "模型没有返回内容。")
 
     @staticmethod
-    def _战绩不可用(文本: str) -> bool:
-        """`_读战绩` 失败时返回的是给人看的整句话，不是数据。"""
-        return 文本.startswith(("提问者还没有", "读取战绩失败"))
-
-    @staticmethod
     def _显示名(候选: str, 兜底: str) -> str:
         return 候选.strip() or 兜底
 
@@ -722,20 +681,23 @@ class Main(Star):
         except Exception:
             return ""
 
-    async def _读战绩(self, 用户: str) -> str:
+    async def _读战绩(self, 用户: str) -> tuple[str, dict[str, Any] | None]:
+        """读一个用户的战绩，返回 (给用户看的文本, 统计字典)。"""
         记录 = self._凭据.读取(用户)
         if not 记录:
-            return "提问者还没有绑定王者营地账号，无法查询战绩。"
-        return await self._读战绩用记录(记录, 标签=用户)
-
-    async def _读战绩用记录(self, 记录: dict[str, Any], *, 标签: str = "") -> str:
-        """只要文本。战绩、锐评用。"""
-        return (await self._读战绩与统计(记录, 标签=标签))[0]
+            return "还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。", None
+        return await self._读战绩与统计(记录, 标签=用户)
 
     async def _读战绩与统计(
         self, 记录: dict[str, Any], *, 标签: str = ""
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str, dict[str, Any] | None]:
         """返回 (给模型读的文本, 统计字典)。
+
+        统计字典为 `None` 表示没有可用数据：读失败，或者这个角色没有可查的
+        近期战绩。**调用方靠这个 `None` 判断能不能继续，不能靠文本长什么样**：
+        「这个角色还没有可查的近期战绩。」与「读取战绩失败：…」都是给人看的
+        整句话，当成数据喂给模型，锐评提示会要求它写够 3 个具体数字，
+        模型只能编。
 
         PK 要的是**统计字典**：两个人的逐项对比得由代码算（`stats.对比要点`），
         不能把两份文本丢给模型让它自己比——那样它会端水。
@@ -743,11 +705,15 @@ class Main(Star):
         async with 营地传输() as 传输:
             传输.绑定账号(**{k: 记录[k] for k in ("营地ID", "令牌", "对称密钥")})
             try:
-                return await 读战绩数据(传输, 记录.get("角色ID") or "")
+                文本, 统计 = await 读战绩数据(传输, 记录.get("角色ID") or "")
             except Exception as exc:
                 谁 = 标签 or 记录.get("营地ID")
                 logger.warning(f"[ainong] 读战绩失败（{谁}）：{type(exc).__name__}: {exc}")
-                return f"读取战绩失败：{exc}", {}
+                return f"读取战绩失败：{exc}", None
+
+        if not 统计.get("总场次"):
+            return 文本, None
+        return 文本, 统计
 
     @staticmethod
     def _同一个账号(甲: dict[str, Any] | None, 乙: dict[str, Any] | None) -> bool:

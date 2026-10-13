@@ -240,6 +240,40 @@ def test_开一局胜负由代码抽():
     assert "开一局提示" in 片段
 
 
+class Test有没有数据靠返回值判断:
+    """不能靠文本前缀判断数据可用性。
+
+    这个角色没有可查的近期战绩时，`汇总文本` 返回的是一句「这个角色还没有可查的
+    近期战绩。」，它既不以「还没绑定」也不以「读取战绩失败」开头。靠前缀判断的话
+    锐评会把这句当成数据喂给模型，而锐评提示要求写够 3 个具体数字，模型只能编。
+    """
+
+    def test_读战绩返回文本与统计字典(self):
+        片段 = _方法源码("Main", "_读战绩")
+        assert "tuple[str, dict[str, Any] | None]" in 片段
+        assert "'还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。', None" in 片段
+
+    def test_没有场次时统计字典是_None(self):
+        片段 = _方法源码("Main", "_读战绩与统计")
+        assert "return (文本, None)" in 片段
+        assert "return (f'读取战绩失败：{exc}', None)" in 片段
+
+    def test_锐评看统计字典而不是文本(self):
+        assert "if 统计 is None:" in _方法源码("Main", "锐评")
+
+    def test_开一局看统计字典(self):
+        assert "if 统计 is None:" in _方法源码("Main", "开一局")
+
+    def test_PK_两边都看统计字典(self):
+        片段 = _方法源码("Main", "PK")
+        assert "if 自己统计 is None:" in 片段
+        assert "if 对手统计 is None:" in 片段
+
+    def test_前缀判断已经不在了(self):
+        """那个判断被统计字典取代了，留着会有人以为还能用。"""
+        assert "_战绩不可用" not in 源码
+
+
 def _别名集() -> set[str]:
     """类体里 `@爱农.command("x", alias={...})` 声明的全部名字与别名。"""
     出: set[str] = set()
