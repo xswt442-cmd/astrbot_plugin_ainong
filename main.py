@@ -39,7 +39,9 @@ _组名 = "爱农"
 # 不上，整条指令静默失败。加一个带斜杠的别名，两种写法都能进。
 _组别名 = {f"/{_组名}"}
 
-_帮助文本 = """爱农 · 王者营地战绩
+_帮助文本 = """爱农 · 王者荣耀战绩查询
+
+数据来自王者营地，需要扫码登录一次。
 
 /爱农 绑定微信
   微信扫码绑定你自己的营地账号。纯 HTTP，不需要浏览器。
@@ -413,7 +415,7 @@ class Main(Star):
         if not 记录:
             yield event.plain_result("你还没有绑定营地账号。")
             return
-        yield event.plain_result(f"已解绑，凭据已删除（营地账号 {记录['营地ID']}）。")
+        yield event.plain_result(f"已解绑，本地凭据已删除（营地账号 {记录['营地ID']}）。")
 
     @爱农.command("状态", alias={"status"})
     async def 状态(self, event: AstrMessageEvent):
@@ -447,7 +449,7 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
             return
 
         新名 = str(名字 or "").strip()
@@ -458,7 +460,7 @@ class Main(Star):
             )
             return
         if len(新名) > _昵称上限:
-            yield event.plain_result(f"名字太长了，{_昵称上限} 个字以内。")
+            yield event.plain_result(f"名字太长了，最多 {_昵称上限} 个字。")
             return
 
         记录["昵称"] = 新名
@@ -473,7 +475,7 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定。")
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
             return
 
         参数 = str(角色ID).strip()
@@ -483,7 +485,7 @@ class Main(Star):
             try:
                 列表 = await 传输.取角色列表()
             except Exception as exc:
-                yield event.plain_result(f"取角色列表失败：{exc}")
+                yield event.plain_result(f"读角色列表失败：{exc}")
                 return
 
         if not 列表:
@@ -551,8 +553,8 @@ class Main(Star):
                 max_steps=8,
             )
         except Exception as exc:
-            logger.warning(f"[ainong] 锐评失败：{type(exc).__name__}: {exc}")
-            yield event.plain_result(f"锐评失败：{exc}")
+            logger.warning(f"[ainong] 锐评调用模型失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"调用模型失败：{exc}")
             return
 
         yield event.plain_result(结果.completion_text or "模型没有返回内容。")
@@ -567,7 +569,7 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if 记录 is None:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
             return
 
         数据, 统计 = await self._读战绩与统计(记录, 标签=用户)
@@ -592,8 +594,8 @@ class Main(Star):
                 max_steps=8,
             )
         except Exception as exc:
-            logger.warning(f"[ainong] 开一局失败：{type(exc).__name__}: {exc}")
-            yield event.plain_result(f"开一局失败：{exc}")
+            logger.warning(f"[ainong] 开一局调用模型失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(f"调用模型失败：{exc}")
             return
 
         yield event.plain_result(结果.completion_text or "模型没有返回内容。")
@@ -613,7 +615,7 @@ class Main(Star):
         自己 = event.get_sender_id()
         自己记录 = self._凭据.读取(自己)
         if 自己记录 is None:
-            yield event.plain_result("你还没绑定营地账号，先发 /爱农 绑定QQ 或 /爱农 绑定微信。")
+            yield event.plain_result("你还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
             return
 
         参数 = str(目标 or "").strip()
@@ -695,8 +697,10 @@ class Main(Star):
                 max_steps=8,
             )
         except Exception as exc:
-            logger.warning(f"[ainong] PK 失败：{type(exc).__name__}: {exc}")
-            yield event.plain_result(f"PK 失败：{exc}\n\n两人的数据：\n\n{自己数据}\n\n{对手数据}")
+            logger.warning(f"[ainong] PK 调用模型失败：{type(exc).__name__}: {exc}")
+            yield event.plain_result(
+                f"调用模型失败：{exc}\n\n两人的数据：\n\n{自己数据}\n\n{对手数据}"
+            )
             return
 
         yield event.plain_result(结果.completion_text or "模型没有返回内容。")
