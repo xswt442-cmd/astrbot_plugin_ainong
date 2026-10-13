@@ -12,10 +12,11 @@ from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.event.filter import command_group, llm_tool
+from astrbot.api.event.filter import command_group, custom_filter, llm_tool
 from astrbot.api.star import Context, Star
 from astrbot.core.message.message_event_result import MessageEventResult
 from astrbot.core.star.filter.command import GreedyStr
+from astrbot.core.star.filter.custom_filter import CustomFilter
 
 # 全部在模块顶层导入。插件加载时就把整个包摸清：少文件、依赖缺失都在启动
 # 阶段报错，而不是等用户发了指令才在懒加载里抛模块不存在。
@@ -27,6 +28,16 @@ from .ainong.pk import 找对手
 from .ainong.prompts import PK提示, 开一局提示, 锐评提示
 from .ainong.stats import 占优项数, 对比文本, 对比要点, 抽对局结果
 from .ainong.storage import 凭据仓库
+from .ainong.兜底 import 以组名开头, 取落空参数, 是否落空, 落空提示
+
+# 指令组名。改这里要同时改 `_帮助文本` 的开头与 `ainong/兜底.py` 的取参函数。
+_组名 = "爱农"
+
+# 组名别名。QQ 官方适配器在「@机器人 + 指令」这条路径上走的是 At 唤醒分支，
+# 那条分支只置 `wake_prefix = ""`，**不剥掉 message_str 里的 `/`**——只有
+# startswith 分支才剥。于是 message_str 仍是 `/爱农 战绩`，组名 `爱农` 匹配
+# 不上，整条指令静默失败。加一个带斜杠的别名，两种写法都能进。
+_组别名 = {f"/{_组名}"}
 
 _帮助文本 = """爱农 · 王者营地战绩
 
@@ -85,13 +96,54 @@ _PK用法 = """要跟谁 PK？写对方的 PK 名字就行，例如：
 # PK 名字的长度上限。只是个称呼，太长在比分那行会挤爆。
 _昵称上限 = 16
 
+# 配置读不到时的兜底值。见 `__init__` 里 config 为什么可省。
+_默认扫码超时 = 180
+_默认侧车地址 = "http://playwright:3000"
+
+
+class _落空兜底(CustomFilter):
+    """`/爱农 <不是子命令>` 时自己接住，别让消息流到模型手里。
+
+    没有它的话这条消息会被 AstrBot 跳过指令、**原样进模型**——模型收到的是
+    一句普通提问，于是自己编。
+
+    只在真落空时 `set_result` + `stop_event`：前者把提示词放进结果链让适配器
+    发出去，后者终止事件传播，免得消息继续走到模型。
+
+    `filter` 的返回值语义是「这条消息我管不管」，**不是**「我有没有命中」——
+    `CommandGroupFilter.filter` 里 `if not self.custom_filter_ok(...): return False`，
+    返回 False 会把整个指令组毙掉。所以所有出口都 return True：不归我管就
+    立刻放行（这一步不能省，见 `ainong.兜底.以组名开头`），命中就自己给结果。
+    """
+
+    def filter(self, event: AstrMessageEvent, cfg: AstrBotConfig) -> bool:
+        文本 = getattr(event, "message_str", "") or ""
+        # 这条过滤器对**每一条消息**都会跑（CommandGroupFilter 先跑
+        # custom_filter_ok 再检查组名），所以第一件事是判断关不关我事。
+        if not 以组名开头(文本, _组名):
+            return True
+        if 是否落空(文本, _组名):
+            event.set_result(MessageEventResult().message(落空提示(取落空参数(文本, _组名))))
+            event.stop_event()
+        return True
+
 
 class Main(Star):
-    @command_group("爱农")
+    # 别写成 `self.爱农.add_custom_filter(...)`——`self.爱农` 是
+    # `RegisteringCommandable`，没有那个方法，加载时会 AttributeError。
+    @custom_filter(_落空兜底)
+    @command_group(_组名, alias=_组别名)
     def 爱农(self):
         """王者营地战绩查询。指令都在这个组下，不占用通用名字。"""
 
-    def __init__(self, context: Context, config: AstrBotConfig) -> None:
+    def __init__(self, context: Context, config: AstrBotConfig | None = None) -> None:
+        """`config` 必须可省。
+
+        AstrBot 的 `star_manager` 只在 `if plugin_config and ...:` 分支里才传配置；
+        仓库没有 `_conf_schema.json` 时那个分支不走，于是只传 context。声明成
+        必需参数会 `TypeError: missing 1 required positional argument: 'config'`，
+        插件整个加载不起来。
+        """
         super().__init__(context)
         self.config = config
         self._凭据 = 凭据仓库(self._数据目录())
@@ -110,7 +162,9 @@ class Main(Star):
         return Path(get_astrbot_data_path()) / "plugin_data" / "ainong"
 
     def _扫码超时(self) -> int:
-        return int(self.config.get("browser_timeout_seconds", 180) or 180)
+        if self.config is None:
+            return _默认扫码超时
+        return int(self.config.get("browser_timeout_seconds", _默认扫码超时) or _默认扫码超时)
 
     async def terminate(self) -> None:
         for 会话 in list(self._扫码会话.values()):
@@ -218,7 +272,9 @@ class Main(Star):
 
     def _侧车地址(self) -> str:
         """浏览器侧车的地址。QQ 扫码要靠它，微信那条不需要。"""
-        return str(self.config.get("playwright_url", "") or "http://playwright:3000")
+        if self.config is None:
+            return _默认侧车地址
+        return str(self.config.get("playwright_url", "") or _默认侧车地址)
 
     def _昵称(self, 用户: str) -> str:
         """发起绑定那个人的平台显示名。取不到就空着，不猜。"""
