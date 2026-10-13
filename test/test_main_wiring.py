@@ -261,6 +261,27 @@ def _别名集() -> set[str]:
     return 出
 
 
+def _帮助块() -> str:
+    起点 = 源码.index('_帮助文本 = """') + len('_帮助文本 = """')
+    return 源码[起点 : 源码.index('"""', 起点)]
+
+
+class Test帮助文案:
+    def test_每个指令都在帮助里(self):
+        """帮助漏一条，用户就只能靠猜或问。"""
+        缺 = sorted(名 for 名 in _指令集() if f"/爱农 {名}" not in _帮助块())
+        assert not 缺, f"帮助文本里没列这些指令：{缺}"
+
+    def test_帮助首行是产品名加游戏名(self):
+        assert _帮助块().lstrip().startswith("爱农 · ")
+
+    def test_说明数据来自哪里(self):
+        assert "数据来自" in _帮助块()
+
+    def test_说明自然语言也能用(self):
+        assert "直接问模型" in _帮助块()
+
+
 class Test落空兜底:
     def test_指令组挂了兜底过滤器(self):
         """指令落空时消息会原样进模型，模型收到普通提问就开始编。"""
