@@ -5,6 +5,18 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.15] - 2026-10-14
+
+### 修正
+
+- **`ainong/auth/` 下的日志改用 `astrbot.api` 的 logger。** 上架审核驳回：
+  `scan_session.py` 在模块顶层、`qq_login.py` 在异常处理里用了 Python 内置
+  `logging`，而插件规范要求 logger 必须且只能从 `astrbot.api` 取。这两个模块
+  刻意不 import astrbot（本地单测要能直接跑它们），所以新增 `ainong/日志.py`
+  做一个日志出口，由 `main.py` 启动时把框架 logger 挂进去——与爱瓦
+  `aiva/transport.py` 是同一套做法。
+- 换一个可用的版本号：`v0.1.14` 提交审核被驳回，驳回也占一次使用记录。
+
 ## [0.1.14] - 2026-10-14
 
 ### 修正

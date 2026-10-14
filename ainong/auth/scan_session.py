@@ -19,13 +19,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import Callable
 from typing import Any
 
+from ..日志 import 记
 from .wechat_flow import 微信出码会话
-
-logger = logging.getLogger("astrbot_plugin_ainong")
 
 __all__ = ["扫码会话"]
 
@@ -72,7 +70,7 @@ class 扫码会话:
             raise
         except BaseException as exc:  # noqa: BLE001 - 任何失败都要能交出去
             if 出错 is None:
-                logger.warning("[ainong] 扫码等待失败：%s: %s", type(exc).__name__, exc)
+                记("warning", f"扫码等待失败：{type(exc).__name__}: {exc}")
                 raise
             try:
                 await 出错(exc)
@@ -80,7 +78,7 @@ class 扫码会话:
                 raise
             except BaseException as 内层:  # noqa: BLE001
                 # 出错处理自己失败时不能连它一起消失，至少留日志
-                logger.error("[ainong] 处理扫码失败时又出错：%s: %s", type(内层).__name__, 内层)
+                记("error", f"处理扫码失败时又出错：{type(内层).__name__}: {内层}")
 
     async def 关闭(self) -> None:
         """取消等待并关掉 http 会话。可重复调用。"""

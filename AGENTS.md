@@ -36,6 +36,7 @@ ainong/prompts.py    锐评、PK 与开一局的提示词（放这儿是为了�
 ainong/pk.py         PK 对手标识的解析
 ainong/storage.py    凭据与绑定关系
 ainong/兜底.py       指令落空的判据与提示
+ainong/日志.py       给不 import astrbot 的模块用的日志出口（见下）
 ainong/verify/       可行性验证脚本，不参与运行
 test/                pytest 用例与真实响应快照
 deploy/              浏览器服务的 compose 片段、Dockerfile 与 seccomp 配置
@@ -102,6 +103,21 @@ docs/                更新日志与术语表
 「没这个字段」读成「这项就是 0」，凭空编出结论。
 
 新增统计维度时，测试里必须有一条是「缺字段时不出现在文本里」。
+
+## 日志只能从 astrbot.api 取
+
+插件规范：`logger` 必须且只能从 `astrbot.api` 导入，**严禁用 Python 内置
+`logging`**。v0.1.14 上架审核就是被这一条驳回的——`ainong/auth/scan_session.py`
+在模块顶层 `import logging`，`qq_login.py` 在异常处理里又写了一遍，而它们都在
+发布包里，只看 `main.py` 查不出来。
+
+`ainong/auth/` 与 `ainong/camp/` 刻意不 import astrbot（本地 pytest 要能直接跑
+它们），所以日志走 `ainong/日志.py` 的出口：`main.py` 在 `__init__` 里
+`挂日志(lambda 级别, 一句: getattr(logger, 级别)(f"[ainong] {一句}"))`，
+模块里用 `记("warning", "……")`。爱瓦的 `aiva/transport.py` 是同一套做法。
+
+约束由 `test_main_wiring.py` 的 `Test日志出口` 扫全包钉住（改完拿旧文件注入过，
+能报出文件名）。
 
 ## 有没有数据靠返回值判断，不靠文本长相
 
