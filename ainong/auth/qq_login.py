@@ -25,6 +25,7 @@ import aiohttp
 
 from ..auth.ysdk import YSDK_URL, build_auth_headers
 from ..camp.transport import 营地传输
+from ..日志 import 记
 from .browser import 浏览器会话
 
 __all__ = ["QQ扫码会话", "QQ_APP_ID", "QQ_LOGIN_URL", "QQ_USER_AGENT"]
@@ -152,13 +153,7 @@ class QQ扫码会话:
             except asyncio.CancelledError:
                 raise
             except BaseException as 内层:  # noqa: BLE001
-                import logging
-
-                logging.getLogger("astrbot_plugin_ainong").error(
-                    "[ainong] 处理 QQ 扫码失败时又出错：%s: %s",
-                    type(内层).__name__,
-                    内层,
-                )
+                记("error", f"处理 QQ 扫码失败时又出错：{type(内层).__name__}: {内层}")
 
     async def _换码直到扫码(self, 换码通知: Callable[[str], Any]) -> str:
         """等扫码，二维码到期才换新的一张。

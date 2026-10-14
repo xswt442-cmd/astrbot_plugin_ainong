@@ -240,6 +240,30 @@ def test_开一局胜负由代码抽():
     assert "开一局提示" in 片段
 
 
+class Test日志出口:
+    """插件规范：logger 必须且只能从 `astrbot.api` 取，不许用内置 `logging`。
+
+    上架审核第一次就是被这一条驳回的——`ainong/auth/` 下两个模块用了内置
+    `logging`，而 main.py 与 camp/ 都是干净的，只看 main.py 查不出来，
+    所以这里扫整个包。
+    """
+
+    def test_包内不用内置logging(self):
+        违规 = [
+            路径.name
+            for 路径 in sorted(入口.parent.joinpath("ainong").rglob("*.py"))
+            if re.search(r"^\s*(?:import logging|from logging)\b", 路径.read_text("utf-8"), re.M)
+        ]
+        assert not 违规, f"这些文件用了内置 logging，要改成从 astrbot.api 取：{违规}"
+
+    def test_logger_从_astrbot_取(self):
+        assert re.search(r"^from astrbot\.api import .*\blogger\b", 源码, re.M)
+
+    def test_把_logger_挂给不_import_astrbot_的模块(self):
+        """auth/ 与 camp/ 刻意不 import astrbot，日志靠钩子送进来。"""
+        assert "挂日志(" in 源码, "main.py 没给日志出口挂上 logger，那些诊断就没了"
+
+
 class Test有没有数据靠返回值判断:
     """不能靠文本前缀判断数据可用性。
 
