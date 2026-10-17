@@ -28,7 +28,7 @@ from .ainong.camp.transport import 营地传输
 from .ainong.pk import 找对手
 from .ainong.prompts import PK提示, 开一局提示, 锐评提示
 from .ainong.stats import 占优项数, 对比文本, 对比要点, 抽对局结果
-from .ainong.storage import 凭据仓库
+from .ainong.storage import 净化昵称, 凭据仓库
 from .ainong.兜底 import 以组名开头, 取落空参数, 是否落空, 落空提示
 
 # 指令组名。改这里要同时改 `_帮助文本` 的开头与 `ainong/兜底.py` 的取参函数。
@@ -282,7 +282,7 @@ class Main(Star):
         if 事件 is None:
             return ""
         try:
-            return str(事件.get_sender_name() or "")
+            return 净化昵称(事件.get_sender_name() or "")
         except Exception:
             return ""
 
@@ -450,9 +450,11 @@ class Main(Star):
             yield event.plain_result("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
             return
 
-        新名 = str(名字 or "").strip()
+        新名 = 净化昵称(名字)
         if not 新名:
-            yield event.plain_result(f"当前 PK 名字：「{记录.get('昵称') or '（没设）'}」。")
+            yield event.plain_result(
+                f"当前 PK 名字：「{净化昵称(记录.get('昵称') or '') or '（没设）'}」。"
+            )
             return
         if len(新名) > _昵称上限:
             yield event.plain_result(f"名字太长了，最多 {_昵称上限} 个字。")
@@ -699,7 +701,8 @@ class Main(Star):
 
     @staticmethod
     def _显示名(候选: str, 兜底: str) -> str:
-        return 候选.strip() or 兜底
+        # 老记录可能是净化之前存的，念之前再洗一次。
+        return 净化昵称(候选) or 兜底
 
     @staticmethod
     def _机器人标识(event: AstrMessageEvent) -> str:

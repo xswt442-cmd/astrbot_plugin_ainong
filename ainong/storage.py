@@ -12,10 +12,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
-__all__ = ["凭据仓库"]
+# 昵称会拼进 PK 提示词。带换行就等于在提示词里凭空多出一行指令；零宽字符
+# 还能让两个名字看起来一模一样。存之前就洗掉，读出来用之前再洗一次。
+_控制字符 = re.compile(r"[\x00-\x1f\x7f\u200b-\u200f\u2028-\u202f\u2060\ufeff]")
+
+
+def 净化昵称(名: str) -> str:
+    """去掉控制字符与零宽字符，再压掉首尾空白。"""
+    return _控制字符.sub("", str(名 or "")).strip()
+
+
+__all__ = ["凭据仓库", "净化昵称"]
 
 _凭据字段 = ("营地ID", "令牌", "对称密钥")
 _文件名后缀 = ".json"
@@ -49,6 +60,8 @@ class 凭据仓库:
         # 顺手把用户标识与昵称一起存下来。文件名是标识的哈希，反推不回去，
         # 而 PK 要按昵称找人、再拿标识去查战绩，两样都得在文件里。
         载荷 = {**账号, "用户": 用户}
+        if "昵称" in 载荷:
+            载荷["昵称"] = 净化昵称(载荷["昵称"])
         路径.write_text(json.dumps(载荷, ensure_ascii=False), encoding="utf-8")
         if os.name == "posix":
             路径.chmod(0o600)
