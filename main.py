@@ -182,9 +182,7 @@ class Main(Star):
 
         已有 = self._凭据.读取(用户)
         if 已有:
-            yield event.plain_result(
-                f"已经绑定了营地账号 {已有['营地ID']}，换号先发 /爱农 解绑。"
-            )
+            yield event.plain_result(f"已经绑定了营地账号 {已有['营地ID']}，换号先发 /爱农 解绑。")
             return
 
         if 用户 in self._扫码会话:
@@ -595,9 +593,7 @@ class Main(Star):
             匹配 = self._凭据.按昵称找(参数)
             if len(匹配) > 1:
                 候选 = "\n".join(f"· {记录.get('昵称') or '（没设名字）'}" for 记录 in 匹配)
-                yield event.plain_result(
-                    f"有 {len(匹配)} 个人叫「{参数}」，写完整一点：\n{候选}"
-                )
+                yield event.plain_result(f"有 {len(匹配)} 个人叫「{参数}」，写完整一点：\n{候选}")
                 return
             if 匹配:
                 对手记录 = 匹配[0]
