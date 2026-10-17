@@ -5,6 +5,15 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.17] - 2026-10-17
+
+### 修正
+
+- **数据目录改用插件名。** 市场审核规则是 `data/plugin_data/<plugin_name>`，
+  `<plugin_name>` 指插件目录名。原来用的是 `plugin_data/ainong`，现在走
+  `StarTools.get_data_dir("astrbot_plugin_ainong")`。老目录里的凭据在首次启动时
+  自动搬过去（只搬不覆盖），搬完删掉空目录，用户不用重新绑定。
+
 ## [0.1.16] - 2026-10-17
 
 ### 变更

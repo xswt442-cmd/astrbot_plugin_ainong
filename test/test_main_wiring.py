@@ -466,3 +466,16 @@ def _未绑定读取(函数: ast.AsyncFunctionDef | ast.FunctionDef) -> list[tup
 
     扫(函数.body)
     return 报告
+
+
+class Test审核合规:
+    """市场审核的硬要求：数据目录必须是 `plugin_data/<plugin_name>`。"""
+
+    def test_数据目录用插件名(self):
+        assert "StarTools.get_data_dir(_插件名)" in 源码
+        assert '_插件名 = "astrbot_plugin_ainong"' in 源码
+        assert '"plugin_data" / "ainong"' not in 源码
+
+    def test_旧目录会被迁移(self):
+        assert "_迁移旧凭据(目录)" in 源码
+        assert '_旧数据目录名 = "ainong"' in 源码
