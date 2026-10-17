@@ -5,6 +5,16 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.18] - 2026-10-17
+
+### 修正
+
+- **日志出口自己从 `astrbot.api` 取 logger。** `ainong/日志.py` 之前在运行期完全靠
+  `main.py` 挂钩子，那个模块里看不到 `from astrbot.api import logger` 这行 import——
+  而审核规则是「logger 必须且只能从 `astrbot.api` 导入」，容易被判形式违规。
+  现在运行期直接用框架 logger，钩子只在 import 不到 astrbot 的本地单测里接管；
+  顺带修掉「忘了挂钩子就静默丢日志」。全包仍然零 `import logging`。
+
 ## [0.1.17] - 2026-10-17
 
 ### 修正

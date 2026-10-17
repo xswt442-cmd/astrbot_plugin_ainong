@@ -30,7 +30,6 @@ from .ainong.prompts import PK提示, 开一局提示, 锐评提示
 from .ainong.stats import 占优项数, 对比文本, 对比要点, 抽对局结果
 from .ainong.storage import 凭据仓库
 from .ainong.兜底 import 以组名开头, 取落空参数, 是否落空, 落空提示
-from .ainong.日志 import 挂日志
 
 # 指令组名。改这里要同时改 `_帮助文本` 的开头与 `ainong/兜底.py` 的取参函数。
 _组名 = "爱农"
@@ -156,10 +155,6 @@ class Main(Star):
         """
         super().__init__(context)
         self.config = config
-        # 插件规范要求 logger 只能从 astrbot.api 取，而 auth/ 刻意不 import
-        # astrbot（本地 pytest 要能直接跑它）。这里把框架 logger 挂给它——
-        # 「扫完了却绑不上」这类问题唯一的线索就是日志。
-        挂日志(lambda 级别, 一句: getattr(logger, 级别)(f"[ainong] {一句}"))
         self._凭据 = 凭据仓库(self._数据目录())
         # 两种授权的会话都放这儿：微信的纯 HTTP，QQ 的要浏览器。用基线类型标注，
         # 两者都实现出码/开始等待/关闭。

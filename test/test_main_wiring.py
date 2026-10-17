@@ -259,9 +259,15 @@ class Test日志出口:
     def test_logger_从_astrbot_取(self):
         assert re.search(r"^from astrbot\.api import .*\blogger\b", 源码, re.M)
 
-    def test_把_logger_挂给不_import_astrbot_的模块(self):
-        """auth/ 与 camp/ 刻意不 import astrbot，日志靠钩子送进来。"""
-        assert "挂日志(" in 源码, "main.py 没给日志出口挂上 logger，那些诊断就没了"
+    def test_日志出口自己从_astrbot_取(self):
+        """auth/ 与 camp/ 不 import astrbot，日志出口必须自己从框架取。
+
+        审核规则是「logger 必须且只能从 astrbot.api 导入」。钩子只在本地单测
+        里接管，运行期由 `日志.py` 直接拿框架 logger。
+        """
+        出口 = (入口.parent / "ainong" / "日志.py").read_text(encoding="utf-8")
+        assert re.search(r"^\s*from astrbot\.api import logger", 出口, re.M)
+        assert not re.search(r"^\s*(?:import|from)\s+logging\b", 出口, re.M)
 
 
 class Test有没有数据靠返回值判断:
