@@ -44,12 +44,17 @@ async def 拉英雄表() -> dict[int, str]:
 
     import aiohttp
 
+    from .日志 import 记
+
     try:
         async with aiohttp.ClientSession() as 会话:
             async with 会话.get(_英雄表地址) as 响应:
                 响应.raise_for_status()
                 条目 = json.loads(await 响应.text())
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - 拿不到就用编号，不影响查战绩
+        # 以前这里是裸 `return {}`，失败完全静默。审核把「静默请求未声明的域名」
+        # 视为隐藏网络访问，所以至少留一条 warning。
+        记("warning", f"英雄名对照表拉取失败，退回显示编号：{type(exc).__name__}: {exc}")
         return {}
 
     _英雄表缓存 = {int(项["ename"]): str(项["cname"]) for 项 in 条目 if "ename" in 项}

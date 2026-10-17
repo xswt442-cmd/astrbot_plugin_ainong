@@ -5,6 +5,21 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.19] - 2026-10-17
+
+### 修正
+
+- **发行包不再带 `ainong/verify/`。** 那是本机排查用的脚本：起 127.0.0.1 的
+  http 服务、开浏览器、把平台凭据写到临时目录。它不会在插件加载时执行，
+  但审核读的是包内容，这类代码留着只会被当成可疑行为。运行时代码没有任何
+  地方 import 它，排掉不影响功能。
+- **英雄名对照表的请求写进 README。** `stats.py` 首次查战绩时会拉
+  `https://pvp.qq.com/web201605/js/herolist.json`（编号→名字），原来既没在
+  文档声明、失败还静默 `return {}`。现在 README「数据来自哪」列了这个地址，
+  失败也会记一条 warning。
+- 同时把 QQ 侧车地址 `http://playwright:3000` 写进同一节——它是唯一的 http 地址，
+  且只走容器内网。
+
 ## [0.1.18] - 2026-10-17
 
 ### 修正

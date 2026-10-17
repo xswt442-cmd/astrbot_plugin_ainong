@@ -34,6 +34,11 @@ uv.lock linguist-generated=true
 #
 # `docs/` 与 `deploy/` 不能排除：README 引用了 `docs/` 下的术语表与更新日志，
 # 也引用了 `deploy/` 的 compose 片段，排除后文档指向空路径。
-test/     export-ignore
-.github/  export-ignore
-uv.lock   export-ignore
+#
+# `ainong/verify/` 是本机排查用的脚本：起 127.0.0.1 的 http 服务、开浏览器、
+# 把平台凭据写到临时目录。它不会在插件加载时执行，但审核是读包内容的，
+# 这类代码留在发行包里只会被当成可疑行为。
+test/           export-ignore
+ainong/verify/  export-ignore
+.github/        export-ignore
+uv.lock         export-ignore

@@ -23,6 +23,13 @@ AstrBot 插件。扫码绑定自己的王者营地账号后，问它就能拿到
 营地账号可以设置战绩是否对外展示。对方关闭时查询会失败，插件会说明原因，
 不做绕过。数据仅用于个人查询，请勿用于批量抓取。
 
+除营地接口外，还有两个地址，都在这里写明：
+
+- `https://pvp.qq.com/web201605/js/herolist.json` —— 英雄编号到名字的对照表，
+  插件启动后首次查战绩时拉一次并缓存；拉不到就退回显示英雄编号，不影响战绩。
+- `http://playwright:3000` —— QQ 扫码用的浏览器侧车，只在选 `/爱农 绑定QQ`
+  时才访问，且只走容器内网。地址可在配置里改。
+
 ## 主要功能
 
 - 扫码绑定自己的营地账号，账号下的多个游戏角色可切换
@@ -118,6 +125,9 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 ```
+
+`ainong/verify/` 下的脚本只在仓库里，**不随发行包发布**（见 `.gitattributes`：
+它们会起本地服务、把凭据写到临时目录，只适合在开发机手动跑）。
 
 协作约定见 [AGENTS.md](AGENTS.md)，更新日志见 [docs/CHANGELOG.md](docs/CHANGELOG.md)，
 术语定义见 [docs/GLOSSARY.md](docs/GLOSSARY.md)，发版流程见
