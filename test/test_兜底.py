@@ -64,12 +64,11 @@ class Test子命令名:
 
 
 class Test落空提示:
-    def test_没参数时列出指令(self):
+    def test_没参数时指向帮助(self):
+        """只留一句出口，不再复述一份迷你菜单。"""
         提示 = 落空提示("")
 
-        assert "战绩" in 提示
-        assert "帮助" in 提示
-        assert "绑定" in 提示
+        assert "/爱农 帮助" in 提示
 
     def test_把参数原样带回去(self):
         """用户不用重新打字。"""

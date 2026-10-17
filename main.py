@@ -40,30 +40,35 @@ _组名 = "爱农"
 # 不上，整条指令静默失败。加一个带斜杠的别名，两种写法都能进。
 _组别名 = {f"/{_组名}"}
 
-_帮助文本 = """爱农 · 王者荣耀战绩查询
-数据来自王者营地，需要扫码登录一次。
-
-/爱农 绑定微信 ｜ 微信扫码绑定，不需要浏览器
-/爱农 绑定QQ ｜ QQ 扫码绑定，需要浏览器侧车
-/爱农 角色 ｜ 列出账号下的游戏角色
-/爱农 角色 <角色ID> ｜ 切换到该角色
-/爱农 战绩 ｜ 当前角色的近期战绩
-/爱农 锐评 ｜ 让模型基于战绩写一段锐评
-/爱农 PK <名字> ｜ 和另一个人比近期战绩
-/爱农 昵称 <名字> ｜ 改 PK 时被叫的名字
-/爱农 开一局 ｜ 推演下一局排位（不是真实战绩）
-/爱农 解绑 ｜ 解除绑定并删除凭据
-/爱农 状态 ｜ 看绑定情况与扫码进度
-/爱农 帮助 ｜ 就是这条
-
-PK 要写对方的 PK 名字，双方都得先绑定营地账号；@ 别人在 QQ 官方平台
-拿不到标识，写了也认不出来。
-直接问模型「我的王者战绩怎么样」也会走同一套数据。"""
+_帮助文本 = """爱农 · 王者营地战绩
+/爱农 绑定微信
+微信扫码绑定你的王者营地账号。
+/爱农 绑定QQ
+QQ 扫码绑定你的王者营地账号。
+/爱农 角色 [角色ID]
+查看你账号下的角色列表或切换至指定角色。
+/爱农 战绩
+查询当前角色的近期战绩。
+/爱农 锐评
+让 bot 基于你的近期战绩进行锐评。
+/爱农 昵称 <名字>
+设置自己的昵称，不设则默认使用你的 QQ 昵称。
+/爱农 PK <名字>
+与另一个已绑定者就近期战绩发起 PK。
+/爱农 开一局
+让 bot 预测你开的下一局游戏会发生什么。
+/爱农 解绑
+解除绑定并立即删除个人数据。
+/爱农 状态
+查看自己的数据状态。
+/爱农 帮助
+就是这条。
+直接用自然语言问也可以，例如「我王者近期战绩如何？」"""
 
 _PK用法 = """要跟谁 PK？写对方的 PK 名字，例如 /爱农 PK 老王。
 
-对方得先绑定营地账号，再发 /爱农 昵称 <名字> 设一个名字。
-@ 别人这条路在 QQ 官方平台走不通——平台不把被 @ 的人的标识交给机器人。"""
+对方得先绑定，再发 /爱农 昵称 <名字> 设一个。
+@ 别人不认——QQ 官方不给被 @ 的人的标识。"""
 
 # PK 名字的长度上限。只是个称呼，太长在比分那行会挤爆。
 _昵称上限 = 16
@@ -178,14 +183,12 @@ class Main(Star):
         已有 = self._凭据.读取(用户)
         if 已有:
             yield event.plain_result(
-                f"你已经绑定了营地账号 {已有['营地ID']}。要换号先用 /爱农 解绑。"
+                f"已经绑定了营地账号 {已有['营地ID']}，换号先发 /爱农 解绑。"
             )
             return
 
         if 用户 in self._扫码会话:
-            yield event.plain_result(
-                f"{平台}扫码已经在进行中，看上一条消息里的二维码；码失效了就发 /爱农 解绑 重来。"
-            )
+            yield event.plain_result(f"{平台}扫码还没结束，看上面那张码。卡住就发 /爱农 解绑。")
             return
 
         # 两种回话方式要用的东西不一样：event 走被动回复（带 msg_id，不需要
@@ -204,10 +207,7 @@ class Main(Star):
                 return
 
             self._扫码会话[用户] = 会话
-            提示 = (
-                "用手机 QQ 扫这个码，以最后一张为准。\n"
-                "扫完自动回你结果；一直没反应就发 /爱农 状态。"
-            )
+            提示 = "用手机 QQ 扫码，以最后一张为准。"
         else:
             会话 = 扫码会话(self._扫码超时())
             try:
@@ -219,7 +219,7 @@ class Main(Star):
                 return
 
             self._扫码会话[用户] = 会话
-            提示 = "用微信扫这个码，扫完等一会儿。\n扫完自动回你结果；一直没反应就发 /爱农 状态。"
+            提示 = "用微信扫码。"
 
         # `_完成` 是本函数的局部函数，不是方法——写 `self._完成` 会 AttributeError
         # （v0.1.8 线上原话）。它炸在扫码成功之后，用户看到的是「扫完了却报错」。
@@ -262,7 +262,7 @@ class Main(Star):
         """二维码换了就再推一张。QQ 的码两分钟就过期，用户手上那张会废掉。"""
 
         async def _通知(图片: str) -> None:
-            await self._通知图片(用户, 图片, "刚才那张码过期了，用这张新的。")
+            await self._通知图片(用户, 图片, "上一张过期了，用这张。")
 
         return _通知
 
@@ -278,7 +278,7 @@ class Main(Star):
                 raise exc
             logger.warning(f"[ainong] 扫码等待失败：{type(exc).__name__}: {exc}")
             # 先通知再清理：_通知 依赖 _事件 与 _会话标识，清理会把它们丢掉。
-            await self._通知(用户, f"{平台}扫码没走完：{exc}\n发 /爱农 状态 看进度。")
+            await self._通知(用户, f"{平台}扫码中断：{exc}")
             await self._清理会话(用户, 会话=self._扫码会话.pop(用户, None))
 
         return _处理
@@ -314,8 +314,7 @@ class Main(Star):
             await self._通知(
                 用户,
                 f"绑定成功，营地账号 {账号['营地ID']}。\n"
-                f"PK 名字是「{昵称 or '（没取到）'}」，"
-                "要改发 /爱农 昵称 <名字>。",
+                f"PK 名字是「{昵称 or '（没取到）'}」，要改发 /爱农 昵称。",
             )
         except Exception as exc:
             logger.warning(f"[ainong] 绑定失败：{type(exc).__name__}: {exc}")
@@ -383,9 +382,9 @@ class Main(Star):
 
         记录 = self._凭据.删除(用户)
         if not 记录:
-            yield event.plain_result("你还没有绑定营地账号。")
+            yield event.plain_result("还没绑定。")
             return
-        yield event.plain_result(f"已解绑，本地凭据已删除（营地账号 {记录['营地ID']}）。")
+        yield event.plain_result(f"已解绑（营地账号 {记录['营地ID']}）。")
 
     @爱农.command("状态", alias={"status"})
     async def 状态(self, event: AstrMessageEvent):
@@ -396,16 +395,17 @@ class Main(Star):
         行 = [f"你的标识：{用户 or '（拿不到）'}"]
         if 记录:
             昵称 = str(记录.get("昵称") or "").strip()
+            当前角色 = 记录.get("角色ID") or "未选，发 /爱农 角色 选"
             行.append(
                 f"已绑定营地账号 {记录['营地ID']}"
                 + (f"（{昵称}）" if 昵称 else "")
-                + f"，当前角色 {记录.get('角色ID') or '（未选，发 /爱农 角色 选）'}"
+                + f"，当前角色 {当前角色}"
             )
         else:
-            行.append("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            行.append("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
 
         if 用户 in self._扫码会话:
-            行.append("有一个扫码会话在进行中，卡住就发 /爱农 解绑 清掉。")
+            行.append("扫码进行中，卡住就发 /爱农 解绑。")
 
         yield event.plain_result("\n".join(行))
 
@@ -419,14 +419,12 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            yield event.plain_result("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
             return
 
         新名 = str(名字 or "").strip()
         if not 新名:
-            yield event.plain_result(
-                f"当前 PK 名字：「{记录.get('昵称') or '（没设）'}」。发 /爱农 昵称 <名字> 改。"
-            )
+            yield event.plain_result(f"当前 PK 名字：「{记录.get('昵称') or '（没设）'}」。")
             return
         if len(新名) > _昵称上限:
             yield event.plain_result(f"名字太长了，最多 {_昵称上限} 个字。")
@@ -434,7 +432,7 @@ class Main(Star):
 
         记录["昵称"] = 新名
         self._凭据.写入(用户, 记录)
-        yield event.plain_result(f"PK 名字改成「{新名}」，群友发 /爱农 PK {新名} 就能点你。")
+        yield event.plain_result(f"PK 名字改成「{新名}」。")
 
     # ---------------------------------------------------------------- 查询
 
@@ -444,7 +442,7 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if not 记录:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            yield event.plain_result("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
             return
 
         参数 = str(角色ID).strip()
@@ -458,7 +456,7 @@ class Main(Star):
                 return
 
         if not 列表:
-            yield event.plain_result("这个营地账号下没有游戏角色。")
+            yield event.plain_result("这个账号下没有游戏角色。")
             return
 
         if not 参数:
@@ -537,7 +535,7 @@ class Main(Star):
         用户 = event.get_sender_id()
         记录 = self._凭据.读取(用户)
         if 记录 is None:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            yield event.plain_result("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
             return
 
         数据, 统计 = await self._读战绩与统计(记录, 标签=用户)
@@ -580,7 +578,7 @@ class Main(Star):
         自己 = event.get_sender_id()
         自己记录 = self._凭据.读取(自己)
         if 自己记录 is None:
-            yield event.plain_result("还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。")
+            yield event.plain_result("还没绑定，先发 /爱农 绑定微信 或 绑定QQ。")
             return
 
         参数 = str(目标 or "").strip()
@@ -598,8 +596,7 @@ class Main(Star):
             if len(匹配) > 1:
                 候选 = "\n".join(f"· {记录.get('昵称') or '（没设名字）'}" for 记录 in 匹配)
                 yield event.plain_result(
-                    f"有 {len(匹配)} 个人叫「{参数}」，分不清是哪个：\n{候选}\n"
-                    "让对方发 /爱农 昵称 换个更特别的名字，或者把名字写完整一点。"
+                    f"有 {len(匹配)} 个人叫「{参数}」，写完整一点：\n{候选}"
                 )
                 return
             if 匹配:
@@ -608,7 +605,7 @@ class Main(Star):
 
         自己记录 = self._凭据.读取(自己)
         if 对手记录 is not None and self._同一个账号(自己记录, 对手记录):
-            yield event.plain_result("这跟你的绑定是同一个营地账号，比不了。")
+            yield event.plain_result("跟你是同一个营地账号，比不了。")
             return
 
         if 对手记录 is None:
@@ -630,7 +627,7 @@ class Main(Star):
             return
         对手数据, 对手统计 = await self._读战绩与统计(对手记录)
         if 对手统计 is None:
-            yield event.plain_result("读不到对方的近期战绩：他可能没选角色，或关了战绩展示。")
+            yield event.plain_result("读不到对方的战绩。")
             return
 
         try:
@@ -690,7 +687,7 @@ class Main(Star):
         """读一个用户的战绩，返回 (给用户看的文本, 统计字典)。"""
         记录 = self._凭据.读取(用户)
         if not 记录:
-            return "还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。", None
+            return "还没绑定，先发 /爱农 绑定微信 或 绑定QQ。", None
         return await self._读战绩与统计(记录, 标签=用户)
 
     async def _读战绩与统计(

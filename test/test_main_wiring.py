@@ -275,7 +275,7 @@ class Test有没有数据靠返回值判断:
     def test_读战绩返回文本与统计字典(self):
         片段 = _方法源码("Main", "_读战绩")
         assert "tuple[str, dict[str, Any] | None]" in 片段
-        assert "'还没绑定营地账号，先发 /爱农 绑定微信 或 /爱农 绑定QQ。', None" in 片段
+        assert "'还没绑定，先发 /爱农 绑定微信 或 绑定QQ。', None" in 片段
 
     def test_没有场次时统计字典是_None(self):
         片段 = _方法源码("Main", "_读战绩与统计")
@@ -333,11 +333,12 @@ class Test帮助文案:
     def test_帮助首行是产品名加游戏名(self):
         assert _帮助块().lstrip().startswith("爱农 · ")
 
-    def test_说明数据来自哪里(self):
-        assert "数据来自" in _帮助块()
+    def test_标题写明数据来自哪里(self):
+        """文案收成一行一句后，数据来源只留在标题里。"""
+        assert "王者营地" in _帮助块().splitlines()[0]
 
     def test_说明自然语言也能用(self):
-        assert "直接问模型" in _帮助块()
+        assert "自然语言" in _帮助块()
 
 
 class Test落空兜底:
