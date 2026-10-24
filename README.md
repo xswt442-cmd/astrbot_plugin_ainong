@@ -130,8 +130,7 @@ uv run ruff format --check .
 它们会起本地服务、把凭据写到临时目录，只适合在开发机手动跑）。
 
 协作约定见 [AGENTS.md](AGENTS.md)，更新日志见 [docs/CHANGELOG.md](docs/CHANGELOG.md)，
-术语定义见 [docs/GLOSSARY.md](docs/GLOSSARY.md)，发版流程见
-[docs/RELEASING.md](docs/RELEASING.md)。
+发版流程见 [docs/RELEASING.md](docs/RELEASING.md)。
 
 ## License
 

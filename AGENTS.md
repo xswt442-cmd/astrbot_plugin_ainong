@@ -31,7 +31,7 @@
 - `ainong/verify/` — 可行性验证脚本，不参与运行
 - `test/` — pytest 用例与真实响应快照
 - `deploy/` — 浏览器服务的 compose 片段、Dockerfile、seccomp 配置
-- `docs/` — 更新日志与术语表
+- `docs/` — 更新日志与发版说明
 
 ## 源码级约束
 
