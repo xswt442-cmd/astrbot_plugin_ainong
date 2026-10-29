@@ -485,3 +485,29 @@ class Test审核合规:
     def test_旧目录会被迁移(self):
         assert "_迁移旧凭据(目录)" in 源码
         assert '_旧数据目录名 = "ainong"' in 源码
+
+
+class Test空指令给帮助:
+    """只发 `/爱农` 时回帮助，别甩框架的「参数不足」。
+
+    2026-10-29 实测（爱瓦）：`/爱瓦 @某人` 落到框架那层，回的是「参数不足」
+    加全部子命令和各自的 docstring——一大段内部说明，用户还是不知道能发什么。
+    """
+
+    def test_只发组名算空指令(self):
+        from ainong.兜底 import 是否空指令
+
+        for 消息 in ("/爱农", "爱农", "/爱农   ", "爱农 "):
+            assert 是否空指令(消息, "爱农"), 消息
+
+    def test_带参数或别人的消息不算(self):
+        from ainong.兜底 import 是否空指令
+
+        for 消息 in ("/爱农 战绩", "爱农战绩", "/爱瓦 状态", "今天天气不错", ""):
+            assert not 是否空指令(消息, "爱农"), 消息
+
+    def test_过滤器回帮助而不是落空提示(self):
+        体 = 源码[源码.index("class _落空兜底") :]
+        体 = 体[: 体.index("class Main(")]
+        assert "是否空指令(" in 体
+        assert "_帮助文本" in 体, "空指令要回帮助，不能只说「不是子命令」"

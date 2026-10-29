@@ -29,7 +29,7 @@ from .ainong.pk import 找对手
 from .ainong.prompts import PK提示, 开一局提示, 锐评提示
 from .ainong.stats import 占优项数, 对比文本, 对比要点, 抽对局结果
 from .ainong.storage import 净化昵称, 凭据仓库
-from .ainong.兜底 import 以组名开头, 取落空参数, 是否落空, 落空提示
+from .ainong.兜底 import 以组名开头, 取落空参数, 是否空指令, 是否落空, 落空提示
 
 # 指令组名。改这里要同时改 `_帮助文本` 的开头与 `ainong/兜底.py` 的取参函数。
 _组名 = "爱农"
@@ -130,6 +130,12 @@ class _落空兜底(CustomFilter):
         # 这条过滤器对**每一条消息**都会跑（CommandGroupFilter 先跑
         # custom_filter_ok 再检查组名），所以第一件事是判断关不关我事。
         if not 以组名开头(文本, _组名):
+            return True
+        if 是否空指令(文本, _组名):
+            # 只发了「/爱农」：回帮助。交给框架会甩一串「参数不足」加各指令的
+            # docstring，用户看到的是内部说明，不是能发什么。
+            event.set_result(MessageEventResult().message(_帮助文本))
+            event.stop_event()
             return True
         if 是否落空(文本, _组名):
             event.set_result(MessageEventResult().message(落空提示(取落空参数(文本, _组名))))
